@@ -3,18 +3,18 @@
    concerned with is connecting to single other computers via TCP/IP,
    exchanging public keys, and getting secure connections."""
 
-from typing import Callable
+from typing import Callable, Optional
 
 
-class PeerSocket:
-    """A connection to a single other peer in the ChatChat network."""
+class EncryptedStream:
+    """An encrypted network connection to another computer."""
 
-    def __init__(
-            self,
+    @staticmethod
+    def connect(
             other_addr: str,
             our_private_key: str,
-            their_public_key: Callable[[str], bool]
-    ) -> None:
+            their_public_key: Callable[[str], bool],
+    ) -> Optional[EncryptedStream]:  # noqa: F821
         """Establishes a connection to `other_addr`. Authenticates the
            connection using `our_private_key`. Passes the public key
            the peer sends through the provided `their_public_key`
@@ -42,4 +42,33 @@ class PeerSocket:
     def close(self) -> None:
         """Closes the socket. After this function is called, `send` and `recv`
            must never be used again on the socket."""
+        pass
+
+
+class EncryptedListener:
+    """A socket that binds to an address and listens for encrypted
+       connections, and yields them as EncryptedStreams."""
+
+    def __init__(
+            self,
+            addr: str,
+            port: int,
+            our_private_key: str,
+            their_public_key: Callable[[str], bool],
+    ) -> None:
+        """Create a new listener socket with the given address, port, and
+           private key. When remote peers connect to this listener,
+           pass the public key they send through the
+           `their_public_key` function; if and only if it returns
+           `true`, use their public key and our private key to
+           negotiate a secure, encrypted connection, which is yielded
+           as an `EncryptedStream`.
+
+           Throws an exception if binding to the address-port pair
+           fails."""
+        pass
+
+    def accept(self) -> EncryptedStream:
+        """Waits for the next valid, encrypted connection to the listener
+           socket, and returns it as an encrypted stream."""
         pass
