@@ -3,30 +3,47 @@
    concerned with is connecting to single other computers via TCP/IP,
    exchanging public keys, and getting secure connections."""
 
-from typing import Callable, Optional
+from typing import Callable, cast
 import socket
 
 # Maximum number of simultaneous connections to allow in the backlog.
 # This affects basically nothing.
 BACKLOG = 16
 
+# Magic number we use to identify the ChatChat protocol.
+MAGIC = 'ChatChat\n'.encode('utf-8')
+
 
 class EncryptedStream:
     """An encrypted network connection to another computer."""
 
+    def __init__(self, sock: socket.socket, key: bytearray) -> None:
+        """Creates a new EncryptedStream that promises that the given socket
+           can be used to send and receive encrypted traffic with the
+           given key."""
+        self._sock = sock
+        self._key = key
+
     @staticmethod
     def connect(
             other_addr: str,
+            other_port: int,
             our_private_key: str,
             their_public_key: Callable[[str], bool],
-    ) -> Optional[EncryptedStream]:  # noqa: F821
+    ) -> EncryptedStream:  # noqa: F821
         """Establishes a connection to `other_addr`. Authenticates the
            connection using `our_private_key`. Passes the public key
            the peer sends through the provided `their_public_key`
            function; if the function returns `true`, then we accept
            their public key, and if it returns `false`, we abort the
            connection and raise an exception."""
-        pass
+        sock = socket.socket()
+        sock.connect((other_addr, other_port))
+
+        sock.send(MAGIC)
+
+        key = cast(bytearray, print('TODO: implement key exchange'))
+        return EncryptedStream(sock, key)
 
     def send(self, data: bytearray) -> None:
         """Sends an array of bytes over the socket; throws an exception if the
@@ -80,4 +97,8 @@ class EncryptedListener:
     def accept(self) -> EncryptedStream:
         """Waits for the next valid, encrypted connection to the listener
            socket, and returns it as an encrypted stream."""
-        pass
+        sock, _ret_addr = self._sock.accept()
+        sock.send(MAGIC)
+
+        key = cast(bytearray, print('TODO: implement key exchange'))
+        return EncryptedStream(sock, key)
