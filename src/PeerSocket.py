@@ -4,6 +4,11 @@
    exchanging public keys, and getting secure connections."""
 
 from typing import Callable, Optional
+import socket
+
+# Maximum number of simultaneous connections to allow in the backlog.
+# This affects basically nothing.
+BACKLOG = 16
 
 
 class EncryptedStream:
@@ -66,7 +71,11 @@ class EncryptedListener:
 
            Throws an exception if binding to the address-port pair
            fails."""
-        pass
+
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+
+        self._sock.bind((addr, port))
+        self._sock.listen(BACKLOG)
 
     def accept(self) -> EncryptedStream:
         """Waits for the next valid, encrypted connection to the listener
