@@ -10,6 +10,9 @@ import socket
 # This affects basically nothing.
 BACKLOG = 16
 
+# Maximum buffer size to receive data from.
+BUFSIZE = 4096
+
 # Magic number we use to identify the ChatChat protocol.
 MAGIC = 'ChatChat\n'.encode('utf-8')
 
@@ -17,12 +20,18 @@ MAGIC = 'ChatChat\n'.encode('utf-8')
 class EncryptedStream:
     """An encrypted network connection to another computer."""
 
-    def __init__(self, sock: socket.socket, key: bytearray) -> None:
+    def __init__(
+            self,
+            sock: socket.socket,
+            key: bytearray,
+            buf: bytearray
+    ) -> None:
         """Creates a new EncryptedStream that promises that the given socket
            can be used to send and receive encrypted traffic with the
            given key."""
         self._sock = sock
         self._key = key
+        self._buf = buf
 
     @staticmethod
     def connect(
@@ -40,10 +49,11 @@ class EncryptedStream:
         sock = socket.socket()
         sock.connect((other_addr, other_port))
 
-        sock.send(MAGIC)
+        buf = bytearray()
+        magic_number_check(sock, buf)
 
         key = cast(bytearray, print('TODO: implement key exchange'))
-        return EncryptedStream(sock, key)
+        return EncryptedStream(sock, key, buf)
 
     def send(self, data: bytearray) -> None:
         """Sends an array of bytes over the socket; throws an exception if the
@@ -98,7 +108,29 @@ class EncryptedListener:
         """Waits for the next valid, encrypted connection to the listener
            socket, and returns it as an encrypted stream."""
         sock, _ret_addr = self._sock.accept()
-        sock.send(MAGIC)
+
+        buf = bytearray()
+        magic_number_check(sock, buf)
 
         key = cast(bytearray, print('TODO: implement key exchange'))
-        return EncryptedStream(sock, key)
+        return EncryptedStream(sock, key, buf)
+
+
+def magic_number_check(sock: socket.socket, buf: bytearray) -> None:
+    """Sends the protocol's magic number over the socket, and expects the
+       machine on the other end to return the same magic number. Uses
+       `buf` as storage for buffering on the socket."""
+    sock.send(MAGIC)
+
+    while len(buf) < len(MAGIC):
+        nextbuf = sock.recv(BUFSIZE)
+        buf += nextbuf
+
+    if not buf.startswith(MAGIC):
+        raise ProtocolException("Received incorrect magic number")
+
+    del buf[0:len(MAGIC)]
+
+
+class ProtocolException(Exception):
+    """An exception that occurs at the protocol level."""
