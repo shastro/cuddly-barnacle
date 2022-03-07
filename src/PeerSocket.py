@@ -24,7 +24,7 @@ class EncryptedStream:
             self,
             sock: socket.socket,
             key: bytearray,
-            buf: bytearray
+            buf: bytearray,
     ) -> None:
         """Creates a new EncryptedStream that promises that the given socket
            can be used to send and receive encrypted traffic with the
