@@ -228,3 +228,43 @@ def read_exact(
 
 class ProtocolException(Exception):
     """An exception that occurs at the protocol level."""
+
+
+def basic_test():
+    command = sys.argv[1]
+    if command == 'listen':
+        listener = EncryptedListener(
+            '0.0.0.0',
+            18457,
+            PrivateKey.generate(),
+            lambda k: True
+        )
+        while True:
+            connection = listener.accept()
+            connection.send(b'Hello World!')
+            connection.close()
+
+    elif command == 'connect':
+        connection = EncryptedStream.connect(
+            sys.argv[2],
+            18457,
+            PrivateKey.generate(),
+            lambda k: True
+        )
+
+        buf = bytearray()
+        while True:
+            next_buf = connection.recv()
+            if len(next_buf) == 0:
+                break
+            buf += next_buf
+
+        print(buf)
+        connection.close()
+
+    else:
+        print('unknown command ' + command)
+
+
+if __name__ == '__main__':
+    basic_test()
