@@ -16,6 +16,9 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+
+import sys
 
 # Maximum number of simultaneous connections to allow in the backlog.
 # This affects basically nothing.
@@ -25,7 +28,7 @@ BACKLOG = 16
 BUFSIZE = 4096
 
 # Magic number we use to identify the ChatChat protocol.
-MAGIC = 'ChatChat\n'.encode('utf-8')
+MAGIC = b'ChatChat\n'
 
 
 class EncryptedStream:
@@ -44,13 +47,22 @@ class EncryptedStream:
         self._key = key
         self._buf = buf
 
+        # BUG: We're using the same key and IV to encrypt traffic
+        # going both ways at the moment, which is trivial to break.
+        nonce = b'\0' * 16
+
+        # Using CTR mode to get a stream cipher.
+        cipher = Cipher(algorithms.AES(self._key), modes.CTR(nonce))
+        self._encryptor = cipher.encryptor()
+        self._decryptor = cipher.decryptor()
+
     @staticmethod
     def connect(
             other_addr: str,
             other_port: int,
             private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
-    ) -> EncryptedStream:  # noqa: F821
+    ) -> 'EncryptedStream':
         """Establishes a connection to `other_addr`. Authenticates the
            connection using `private_key`. Passes the public key the
            peer sends through the provided `key_checker` function; if
@@ -67,26 +79,28 @@ class EncryptedStream:
 
         return EncryptedStream(sock, key, buf)
 
-    def send(self, data: bytearray) -> None:
+    def send(self, data: bytes) -> None:
         """Sends an array of bytes over the socket; throws an exception if the
            data cannot be sent. This function can be considered
            secure: under no circumstances can an eavesdropper on the
            wire be able to obtain `data`."""
-        pass
+        encrypted = self._encryptor.update(data)
+        self._sock.send(encrypted)  # send_all?
 
-    def recv(self) -> bytearray:
+    def recv(self) -> bytes:
         """Receives an array of bytes from the socket; throws an exception if
            a networking or security error occurs. Due to the nature of
            TCP, the returned data may be a portion of a valid packet,
            or more than one valid packet; it is the responsibility of
            the caller to maintain bytes that have been received and
            assemble them into proper protocol data."""
-        pass
+        encrypted = self._sock.recv(BUFSIZE)
+        return self._decryptor.update(encrypted)
 
     def close(self) -> None:
         """Closes the socket. After this function is called, `send` and `recv`
            must never be used again on the socket."""
-        pass
+        self._sock.close()
 
 
 class EncryptedListener:
@@ -172,7 +186,7 @@ def key_exchange(
     # (4-byte) integers.
     sock.send(bytearray(len(our_pk_bytes).to_bytes(4, 'big')) + our_pk_bytes)
     their_pk_len = int.from_bytes(read_exact(sock, buf, 4), 'big')
-    their_pk_bytes = read_exact(sock, buf, their_pk_len)
+    their_pk_bytes = bytes(read_exact(sock, buf, their_pk_len))
     their_pk = PublicKey.from_public_bytes(their_pk_bytes)
 
     if not key_checker(their_pk):
