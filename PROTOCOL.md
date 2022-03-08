@@ -83,6 +83,8 @@ same (i.e., permanently leaves the channel).
 A user signals that they are online. This message should automatically
 be sent by a client as soon as it completes its initialization phase.
 
+When you are new node with no knowledge at all you first check a list of ip addrs in the database and start trying to establish connections to each of the known ip addresses. Only send blobs and start synchronization processes if they respond with a public key. 
+
 ### Part
 
 A user signals that they are no longer online, optionally with a
