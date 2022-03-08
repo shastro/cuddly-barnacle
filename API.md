@@ -9,7 +9,9 @@ system.
 
 ## Authentication
 
-TODO
+Purpose: 
+* Unlock your private key to allow for connection to network
+* Username 
 
 ## Sending messages
 
