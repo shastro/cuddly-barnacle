@@ -16,7 +16,12 @@ from cryptography.hazmat.primitives.serialization import (
 )
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.ciphers import (
+    Cipher,
+    algorithms,
+    modes,
+    CipherContext,
+)
 
 import sys
 
@@ -53,8 +58,8 @@ class EncryptedStream:
 
         # Using CTR mode to get a stream cipher.
         cipher = Cipher(algorithms.AES(self._key), modes.CTR(nonce))
-        self._encryptor = cipher.encryptor()
-        self._decryptor = cipher.decryptor()
+        self._encryptor: CipherContext = cipher.encryptor()  # type: ignore
+        self._decryptor: CipherContext = cipher.decryptor()  # type: ignore
 
     @staticmethod
     def connect(
@@ -230,7 +235,7 @@ class ProtocolException(Exception):
     """An exception that occurs at the protocol level."""
 
 
-def basic_test():
+def basic_test() -> None:
     command = sys.argv[1]
     if command == 'listen':
         listener = EncryptedListener(
