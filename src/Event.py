@@ -1,6 +1,7 @@
 """Event types within a ChatChat channel."""
 
 from enum import Enum, auto, unique
+from io import BufferedReader, BufferedWriter
 
 
 @unique
@@ -35,4 +36,11 @@ class Event:
        chat history and propagated to every connected client."""
 
     def __init__(self) -> None:
+        pass
+
+    @staticmethod
+    def deserialize(stream: BufferedReader) -> 'Event':
+        pass
+
+    def serialize(self, stream: BufferedWriter) -> None:
         pass
