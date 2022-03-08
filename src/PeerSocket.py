@@ -3,27 +3,27 @@
    concerned with is connecting to single other computers via TCP/IP,
    exchanging public keys, and getting secure connections."""
 
-from typing import Callable
-from io import BufferedRWPair
+from io import BufferedIOBase, BufferedRWPair
+from typing import Any, Callable, cast, Optional
 import socket
 import sys
 import time
 
+from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey as PrivateKey,
     X25519PublicKey as PublicKey,
 )
+from cryptography.hazmat.primitives.ciphers import (
+    algorithms,
+    Cipher,
+    CipherContext,
+    modes,
+)
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
-)
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives.ciphers import (
-    Cipher,
-    algorithms,
-    modes,
-    CipherContext,
 )
 
 # Maximum number of simultaneous connections to allow in the backlog,
@@ -35,7 +35,7 @@ BACKLOG = 16
 MAGIC = b'ChatChat\n'
 
 
-class EncryptedStream:
+class EncryptedStream(BufferedIOBase):
     """An encrypted network connection to another computer."""
 
     def __init__(
@@ -55,8 +55,8 @@ class EncryptedStream:
 
         # Using CTR mode to get a stream cipher.
         cipher = Cipher(algorithms.AES(self._key), modes.CTR(nonce))
-        self._encryptor: CipherContext = cipher.encryptor()  # type: ignore
-        self._decryptor: CipherContext = cipher.decryptor()  # type: ignore
+        self._encryptor = cast(CipherContext, cipher.encryptor())
+        self._decryptor = cast(CipherContext, cipher.decryptor())
 
     @staticmethod
     def connect(
@@ -77,24 +77,22 @@ class EncryptedStream:
         # This is annoying: if you look at the source code,
         # `sock.makefile` returns a BufferedRWPair, but mypy isn't
         # convinced of that.
-        buf: BufferedRWPair = sock.makefile('rwb')  # type: ignore
+        buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
         magic_number_check(buf)
         key = key_exchange(buf, private_key, key_checker)
 
         return EncryptedStream(buf, key)
 
-    def write(self, data: bytes) -> None:
+    def write(self, data: Any) -> int:
         """Sends an array of bytes over the socket; throws an exception if the
            data cannot be sent. This function can be considered
            secure: under no circumstances can an eavesdropper on the
-           wire be able to obtain `data`. The semantics of this
-           function are the same as those of
-           io.BufferedIOPair.write."""
+           wire be able to obtain `data`."""
         encrypted = self._encryptor.update(data)
-        self._inner.write(encrypted)
+        return self._inner.write(encrypted)
 
-    def read(self, n: int = -1) -> bytes:
+    def read(self, n: Optional[int] = None) -> bytes:
         """Receives an array of bytes from the socket; throws an exception if
            a networking or security error occurs. The semantics of
            this function are the same as those of
@@ -149,7 +147,7 @@ class EncryptedListener:
         while True:
             try:
                 sock, _ret_addr = self._sock.accept()
-                buf: BufferedRWPair = sock.makefile('rwb')  # type: ignore
+                buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
                 # BUG: These are blocking operations, which will lock
                 # up the main thread if someone connects and then
