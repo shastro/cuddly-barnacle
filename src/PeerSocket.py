@@ -4,7 +4,10 @@
    exchanging public keys, and getting secure connections."""
 
 from typing import Callable
+from io import BufferedRWPair
 import socket
+import sys
+import time
 
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey as PrivateKey,
@@ -23,14 +26,10 @@ from cryptography.hazmat.primitives.ciphers import (
     CipherContext,
 )
 
-import sys
-
-# Maximum number of simultaneous connections to allow in the backlog.
-# This affects basically nothing.
+# Maximum number of simultaneous connections to allow in the backlog,
+# in the unlikely event that multiple clients connect between `accept`
+# calls.
 BACKLOG = 16
-
-# Maximum buffer size to receive data from.
-BUFSIZE = 4096
 
 # Magic number we use to identify the ChatChat protocol.
 MAGIC = b'ChatChat\n'
@@ -41,16 +40,14 @@ class EncryptedStream:
 
     def __init__(
             self,
-            sock: socket.socket,
+            inner: BufferedRWPair,
             key: bytes,
-            buf: bytearray,
     ) -> None:
-        """Creates a new EncryptedStream that promises that the given socket
-           can be used to send and receive encrypted traffic with the
-           given key."""
-        self._sock = sock
+        """Creates a new EncryptedStream that promises that the given buffered
+           socket can be used to send and receive encrypted traffic
+           with the given key."""
+        self._inner = inner
         self._key = key
-        self._buf = buf
 
         # BUG: We're using the same key and IV to encrypt traffic
         # going both ways at the moment, which is trivial to break.
@@ -76,36 +73,44 @@ class EncryptedStream:
            raise an exception."""
         sock = socket.socket()
         sock.connect((other_addr, other_port))
-        buf = bytearray()
 
-        magic_number_check(sock, buf)
+        # This is annoying: if you look at the source code,
+        # `sock.makefile` returns a BufferedRWPair, but mypy isn't
+        # convinced of that.
+        buf: BufferedRWPair = sock.makefile('rwb')  # type: ignore
 
-        key = key_exchange(sock, buf, private_key, key_checker)
+        magic_number_check(buf)
+        key = key_exchange(buf, private_key, key_checker)
 
-        return EncryptedStream(sock, key, buf)
+        return EncryptedStream(buf, key)
 
-    def send(self, data: bytes) -> None:
+    def write(self, data: bytes) -> None:
         """Sends an array of bytes over the socket; throws an exception if the
            data cannot be sent. This function can be considered
            secure: under no circumstances can an eavesdropper on the
            wire be able to obtain `data`."""
         encrypted = self._encryptor.update(data)
-        self._sock.send(encrypted)  # send_all?
+        self._inner.write(encrypted)
 
-    def recv(self) -> bytes:
+    def read(self, n: int = -1) -> bytes:
         """Receives an array of bytes from the socket; throws an exception if
            a networking or security error occurs. Due to the nature of
            TCP, the returned data may be a portion of a valid packet,
            or more than one valid packet; it is the responsibility of
            the caller to maintain bytes that have been received and
            assemble them into proper protocol data."""
-        encrypted = self._sock.recv(BUFSIZE)
+        encrypted = self._inner.read(n)
         return self._decryptor.update(encrypted)
+
+    def flush(self) -> None:
+        """Immediately reads and writes any unwritten bytes from the
+           socket."""
+        self._inner.flush()
 
     def close(self) -> None:
         """Closes the socket. After this function is called, `send` and `recv`
            must never be used again on the socket."""
-        self._sock.close()
+        self._inner.close()
 
 
 class EncryptedListener:
@@ -144,37 +149,35 @@ class EncryptedListener:
         while True:
             try:
                 sock, _ret_addr = self._sock.accept()
-                buf = bytearray()
+                buf: BufferedRWPair = sock.makefile('rwb')  # type: ignore
 
                 # BUG: These are blocking operations, which will lock
                 # up the main thread if someone connects and then
                 # doesn't send any data.
-                magic_number_check(sock, buf)
+                magic_number_check(buf)
 
                 key = key_exchange(
-                    sock,
                     buf,
                     self._private_key,
                     self._key_checker
                 )
-                return EncryptedStream(sock, key, buf)
+                return EncryptedStream(buf, key)
 
             except ProtocolException as e:
                 print('Warning: rejected incoming connection: ' + str(e))
 
 
-def magic_number_check(sock: socket.socket, buf: bytearray) -> None:
+def magic_number_check(sock: BufferedRWPair) -> None:
     """Sends the protocol's magic number over the socket, and expects the
-       machine on the other end to return the same magic number. Uses
-       `buf` as storage for buffering on the socket."""
-    sock.send(MAGIC)
-    if read_exact(sock, buf, len(MAGIC)) != MAGIC:
+       machine on the other end to return the same magic number."""
+    sock.write(MAGIC)
+    sock.flush()
+    if sock.read(len(MAGIC)) != MAGIC:
         raise ProtocolException('received incorrect magic number')
 
 
 def key_exchange(
-        sock: socket.socket,
-        buf: bytearray,
+        sock: BufferedRWPair,
         private_key: PrivateKey,
         key_checker: Callable[[PublicKey], bool],
 ) -> bytes:
@@ -189,9 +192,11 @@ def key_exchange(
 
     # Send and receive public keys prefixed by their lengths as 32-bit
     # (4-byte) integers.
-    sock.send(bytearray(len(our_pk_bytes).to_bytes(4, 'big')) + our_pk_bytes)
-    their_pk_len = int.from_bytes(read_exact(sock, buf, 4), 'big')
-    their_pk_bytes = bytes(read_exact(sock, buf, their_pk_len))
+    sock.write(bytearray(len(our_pk_bytes).to_bytes(4, 'big')) + our_pk_bytes)
+    sock.flush()
+
+    their_pk_len = int.from_bytes(sock.read(4), 'big')
+    their_pk_bytes = bytes(sock.read(their_pk_len))
     their_pk = PublicKey.from_public_bytes(their_pk_bytes)
 
     if not key_checker(their_pk):
@@ -210,27 +215,6 @@ def key_exchange(
     return derived_key
 
 
-def read_exact(
-        sock: socket.socket,
-        buf: bytearray,
-        length: int,
-) -> bytearray:
-    """Reads exactly `length` bytes from `sock`, using `buf` to store
-       extra bytes read. Throws an exception if less than `length`
-       bytes can be read from the socket."""
-    while len(buf) < length:
-        nextbuf = sock.recv(BUFSIZE)
-        if len(nextbuf) == 0:
-            raise ProtocolException('unexpected EOF')
-
-        buf += nextbuf
-
-    read = buf[0:length]
-    del buf[0:length]
-
-    return read
-
-
 class ProtocolException(Exception):
     """An exception that occurs at the protocol level."""
 
@@ -246,7 +230,13 @@ def basic_test() -> None:
         )
         while True:
             connection = listener.accept()
-            connection.send(b'Hello World!')
+
+            # Test buffering
+            connection.write(b'Hello ')
+            connection.flush()
+            time.sleep(1)
+            connection.write(b'World!')
+
             connection.close()
 
     elif command == 'connect':
@@ -257,14 +247,7 @@ def basic_test() -> None:
             lambda k: True
         )
 
-        buf = bytearray()
-        while True:
-            next_buf = connection.recv()
-            if len(next_buf) == 0:
-                break
-            buf += next_buf
-
-        print(buf)
+        print(connection.read(1000))
         connection.close()
 
     else:
