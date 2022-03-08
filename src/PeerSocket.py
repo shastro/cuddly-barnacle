@@ -88,17 +88,17 @@ class EncryptedStream:
         """Sends an array of bytes over the socket; throws an exception if the
            data cannot be sent. This function can be considered
            secure: under no circumstances can an eavesdropper on the
-           wire be able to obtain `data`."""
+           wire be able to obtain `data`. The semantics of this
+           function are the same as those of
+           io.BufferedIOPair.write."""
         encrypted = self._encryptor.update(data)
         self._inner.write(encrypted)
 
     def read(self, n: int = -1) -> bytes:
         """Receives an array of bytes from the socket; throws an exception if
-           a networking or security error occurs. Due to the nature of
-           TCP, the returned data may be a portion of a valid packet,
-           or more than one valid packet; it is the responsibility of
-           the caller to maintain bytes that have been received and
-           assemble them into proper protocol data."""
+           a networking or security error occurs. The semantics of
+           this function are the same as those of
+           io.BufferedIOPair.read."""
         encrypted = self._inner.read(n)
         return self._decryptor.update(encrypted)
 
@@ -181,8 +181,8 @@ def key_exchange(
         private_key: PrivateKey,
         key_checker: Callable[[PublicKey], bool],
 ) -> bytes:
-    """Performs a key exchange with over the socket with the given private
-       key. Checks the public key the peer sends with the functin
+    """Performs a key exchange over the socket with the given private key.
+       Checks the public key the peer sends with the function
        `key_checker`; raises an exception if that function returns
        `False`."""
     our_pk_bytes = private_key.public_key().public_bytes(
@@ -206,8 +206,6 @@ def key_exchange(
     derived_key = HKDF(
         algorithm=hashes.SHA256(),
         length=32,
-        # I'm 85% certain these should both be None; need to do
-        # further research to be positive, though. ~~Alex
         salt=None,
         info=None,
     ).derive(shared_key)
