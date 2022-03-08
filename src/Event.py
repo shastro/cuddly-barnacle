@@ -1,8 +1,9 @@
 """Event types within a ChatChat channel."""
 
-from enum import Enum, auto
+from enum import Enum, auto, unique
 
 
+@unique
 class EventId(Enum):
     """Types of events that are recorded within a ChatChat network's chat
        history and propagated to every connected client."""

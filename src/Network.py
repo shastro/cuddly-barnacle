@@ -1,8 +1,9 @@
 """Network packet classes & definitions."""
 
-from enum import Enum, auto
+from enum import Enum, auto, unique
 
 
+@unique
 class PacketId(Enum):
     """Packet ID numbers."""
 
