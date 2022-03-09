@@ -4,7 +4,7 @@
    exchanging public keys, and getting secure connections."""
 
 from io import BufferedIOBase, BufferedRWPair
-from typing import Any, Callable, cast, Optional
+from typing import Any, Callable, cast, Optional, Tuple
 import socket
 import sys
 import time
@@ -41,22 +41,33 @@ class EncryptedStream(BufferedIOBase):
     def __init__(
             self,
             inner: BufferedRWPair,
-            key: bytes,
+            outgoing_key: bytes,
+            incoming_key: bytes,
     ) -> None:
         """Creates a new EncryptedStream that promises that the given buffered
            socket can be used to send and receive encrypted traffic
            with the given key."""
         self._inner = inner
-        self._key = key
+        self._incoming_key = incoming_key
+        self._outgoing_key = outgoing_key
 
-        # BUG: We're using the same key and IV to encrypt traffic
-        # going both ways at the moment, which is trivial to break.
         nonce = b'\0' * 16
 
         # Using CTR mode to get a stream cipher.
-        cipher = Cipher(algorithms.AES(self._key), modes.CTR(nonce))
-        self._encryptor = cast(CipherContext, cipher.encryptor())
-        self._decryptor = cast(CipherContext, cipher.decryptor())
+        self._decryptor = cast(
+            CipherContext,
+            Cipher(
+                algorithms.AES(self._incoming_key),
+                modes.CTR(nonce),
+            ).decryptor(),
+        )
+        self._encryptor = cast(
+            CipherContext,
+            Cipher(
+                algorithms.AES(self._outgoing_key),
+                modes.CTR(nonce),
+            ).decryptor(),
+        )
 
     @staticmethod
     def connect(
@@ -80,9 +91,9 @@ class EncryptedStream(BufferedIOBase):
         buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
         magic_number_check(buf)
-        key = key_exchange(buf, private_key, key_checker)
+        c2s, s2c = key_exchange(buf, private_key, key_checker)
 
-        return EncryptedStream(buf, key)
+        return EncryptedStream(buf, c2s, s2c)
 
     def write(self, data: Any) -> int:
         """Sends an array of bytes over the socket; throws an exception if the
@@ -154,14 +165,14 @@ class EncryptedListener:
                 # doesn't send any data.
                 magic_number_check(buf)
 
-                key = key_exchange(
+                c2s, s2c = key_exchange(
                     buf,
                     self._private_key,
                     self._key_checker
                 )
-                return EncryptedStream(buf, key)
+                return EncryptedStream(buf, s2c, c2s)
 
-            except ProtocolException as e:
+            except Exception as e:
                 print('Warning: rejected incoming connection: ' + str(e))
 
 
@@ -178,11 +189,15 @@ def key_exchange(
         sock: BufferedRWPair,
         private_key: PrivateKey,
         key_checker: Callable[[PublicKey], bool],
-) -> bytes:
+) -> Tuple[bytes, bytes]:
     """Performs a key exchange over the socket with the given private key.
        Checks the public key the peer sends with the function
        `key_checker`; raises an exception if that function returns
-       `False`."""
+       `False`.
+
+       Returns a pair of keys: the first one for use when sending data
+       from the client to the server, and the second for use when
+       sending data from the server to the client."""
     our_pk_bytes = private_key.public_key().public_bytes(
         encoding=Encoding.Raw,
         format=PublicFormat.Raw,
@@ -201,14 +216,18 @@ def key_exchange(
         raise ProtocolException("rejected peer's public key")
 
     shared_key = private_key.exchange(their_pk)
-    derived_key = HKDF(
+
+    return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
-        info=None,
+        info=b'Client to server',
+    ).derive(shared_key), HKDF(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=None,
+        info=b'Server to client',
     ).derive(shared_key)
-
-    return derived_key
 
 
 class ProtocolException(Exception):
