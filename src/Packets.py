@@ -1,10 +1,20 @@
 """Network packet classes & definitions."""
 
+from abc import ABC, abstractmethod
 from enum import Enum, auto, unique
 from io import BufferedReader, BufferedWriter
-from typing import List
+from typing import List, Optional
 
 from Event import Event
+from Serial import (
+    deserialize_long,
+    deserialize_byte,
+    deserialize_list,
+    serialize_long,
+    serialize_byte,
+    serialize_list,
+)
+from PeerSocket import ProtocolException
 
 
 @unique
@@ -21,15 +31,51 @@ class PacketId(Enum):
     POST_EVENT = auto()
 
 
-class PacketBase:
+class Packet:
+    """A packet that can be sent and received over the network."""
+
+    def __init__(self, inner: 'PacketBase') -> None:
+        self._inner = inner
+
+    @staticmethod
+    def deserialize(stream: BufferedReader) -> 'Packet':
+        kind = deserialize_byte(stream)
+        inner: Optional[PacketBase] = None
+        if kind == PacketId.GET_EVENTS.value:
+            inner = PacketGetEvents.deserialize(stream)
+        elif kind == PacketId.GET_EVENTS_RESP.value:
+            inner = PacketGetEventsResp.deserialize(stream)
+        elif kind == PacketId.POST_EVENT.value:
+            inner = PacketPostEvent.deserialize(stream)
+        else:
+            raise ProtocolException('unknown packet type ' + str(kind))
+
+        return Packet(inner)
+
+    def serialize(self, stream: BufferedWriter) -> None:
+        if isinstance(self._inner, PacketGetEvents):
+            serialize_byte(stream, PacketId.GET_EVENTS.value)
+        elif isinstance(self._inner, PacketGetEventsResp):
+            serialize_byte(stream, PacketId.GET_EVENTS_RESP.value)
+        elif isinstance(self._inner, PacketPostEvent):
+            serialize_byte(stream, PacketId.POST_EVENT.value)
+        else:
+            raise ProtocolException('unknown event ' + str(self._inner))
+
+        self._inner.serialize(stream)
+
+
+class PacketBase(ABC):
     """The base class from which all network packets inherit."""
 
     @staticmethod
+    @abstractmethod
     def deserialize(stream: BufferedReader) -> 'PacketBase':
         """Read the packet's bytes from the network, and return the
            represented packet object."""
         pass
 
+    @abstractmethod
     def serialize(self, stream: BufferedWriter) -> None:
         """Convert the packet's content to bytes, and write them to the
            network."""
@@ -45,10 +91,10 @@ class PacketGetEvents(PacketBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'PacketGetEvents':
-        return PacketGetEvents(int.from_bytes(stream.read(8), 'big'))
+        return PacketGetEvents(deserialize_long(stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        stream.write(self._since.to_bytes(8, 'big'))
+        serialize_long(stream, self._since)
 
 
 class PacketGetEventsResp(PacketBase):
@@ -59,19 +105,14 @@ class PacketGetEventsResp(PacketBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'PacketGetEventsResp':
-        n_events = int.from_bytes(stream.read(4), 'big')
-
-        events = []
-        for _ in range(n_events):
-            events.append(Event.deserialize(stream))
-
-        return PacketGetEventsResp(events)
+        return PacketGetEventsResp(deserialize_list(Event.deserialize, stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        stream.write(len(self._events).to_bytes(4, 'big'))
-
-        for ev in self._events:
-            ev.serialize(stream)
+        serialize_list(
+            lambda stream, ev: ev.serialize(stream),
+            stream,
+            self._events
+        )
 
 
 class PacketPostEvent(PacketBase):

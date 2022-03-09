@@ -54,20 +54,15 @@ class EncryptedStream(BufferedIOBase):
         nonce = b'\0' * 16
 
         # Using CTR mode to get a stream cipher.
-        self._decryptor = cast(
-            CipherContext,
-            Cipher(
-                algorithms.AES(self._incoming_key),
-                modes.CTR(nonce),
-            ).decryptor(),
-        )
-        self._encryptor = cast(
-            CipherContext,
-            Cipher(
-                algorithms.AES(self._outgoing_key),
-                modes.CTR(nonce),
-            ).decryptor(),
-        )
+        self._decryptor: CipherContext = Cipher(
+            algorithms.AES(self._incoming_key),
+            modes.CTR(nonce),
+        ).decryptor()  # type: ignore
+
+        self._encryptor: CipherContext = Cipher(
+            algorithms.AES(self._outgoing_key),
+            modes.CTR(nonce),
+        ).decryptor()  # type: ignore
 
     @staticmethod
     def connect(
