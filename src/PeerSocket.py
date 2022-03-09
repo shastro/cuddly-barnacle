@@ -3,7 +3,7 @@
    concerned with is connecting to single other computers via TCP/IP,
    exchanging public keys, and getting secure connections."""
 
-from io import BufferedIOBase, BufferedRWPair
+from io import BufferedIOBase, BufferedRWPair, BufferedWriter, BufferedReader
 from typing import Any, Callable, cast, Optional, Tuple
 import socket
 import sys
@@ -25,6 +25,8 @@ from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
 )
+
+from Serial import serialize_bytes, deserialize_bytes
 
 # Maximum number of simultaneous connections to allow in the backlog,
 # in the unlikely event that multiple clients connect between `accept`
@@ -198,31 +200,36 @@ def key_exchange(
         format=PublicFormat.Raw,
     )
 
-    # Send and receive public keys prefixed by their lengths as 32-bit
-    # (4-byte) integers.
-    sock.write(bytearray(len(our_pk_bytes).to_bytes(4, 'big')) + our_pk_bytes)
+    # Send and receive public keys.
+    serialize_bytes(
+        cast(BufferedWriter, sock),
+        our_pk_bytes,
+    )
     sock.flush()
 
-    their_pk_len = int.from_bytes(sock.read(4), 'big')
-    their_pk_bytes = bytes(sock.read(their_pk_len))
-    their_pk = PublicKey.from_public_bytes(their_pk_bytes)
+    their_pk = PublicKey.from_public_bytes(deserialize_bytes(
+        cast(BufferedReader, sock)
+    ))
 
     if not key_checker(their_pk):
         raise ProtocolException("rejected peer's public key")
 
     shared_key = private_key.exchange(their_pk)
 
-    return HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info=b'Client to server',
-    ).derive(shared_key), HKDF(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=None,
-        info=b'Server to client',
-    ).derive(shared_key)
+    return (
+        HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'Client to server',
+        ).derive(shared_key),
+        HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b'Server to client',
+        ).derive(shared_key),
+    )
 
 
 class ProtocolException(Exception):
