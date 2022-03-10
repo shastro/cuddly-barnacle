@@ -36,6 +36,10 @@ BACKLOG = 16
 # Magic number we use to identify the ChatChat protocol.
 MAGIC = b'ChatChat\n'
 
+# If this is `True`, don't actually encrypt messages. Makes life a bit
+# easier when debugging with Wireshark.
+DRY_RUN = False
+
 
 class EncryptedStream(BufferedIOBase):
     """An encrypted network connection to another computer."""
@@ -97,7 +101,10 @@ class EncryptedStream(BufferedIOBase):
            data cannot be sent. This function can be considered
            secure: under no circumstances can an eavesdropper on the
            wire be able to obtain `data`."""
-        encrypted = self._encryptor.update(data)
+        if DRY_RUN:
+            encrypted = data
+        else:
+            encrypted = self._encryptor.update(data)
         return self._inner.write(encrypted)
 
     def read(self, n: Optional[int] = None) -> bytes:
@@ -106,7 +113,10 @@ class EncryptedStream(BufferedIOBase):
            this function are the same as those of
            io.BufferedIOPair.read."""
         encrypted = self._inner.read(n)
-        return self._decryptor.update(encrypted)
+        if DRY_RUN:
+            return encrypted
+        else:
+            return self._decryptor.update(encrypted)
 
     def flush(self) -> None:
         """Immediately reads and writes any unwritten bytes from the
