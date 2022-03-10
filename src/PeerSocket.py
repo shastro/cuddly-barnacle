@@ -207,9 +207,9 @@ def key_exchange(
     )
     sock.flush()
 
-    their_pk = PublicKey.from_public_bytes(deserialize_bytes(
+    their_pk = PublicKey.from_public_bytes(bytes(deserialize_bytes(
         cast(BufferedReader, sock)
-    ))
+    )))
 
     if not key_checker(their_pk):
         raise ProtocolException("rejected peer's public key")
@@ -243,7 +243,7 @@ def basic_test() -> None:
             '0.0.0.0',
             18457,
             PrivateKey.generate(),
-            lambda k: True
+            lambda k: True,
         )
         while True:
             connection = listener.accept()
@@ -261,7 +261,7 @@ def basic_test() -> None:
             sys.argv[2],
             18457,
             PrivateKey.generate(),
-            lambda k: True
+            lambda k: True,
         )
 
         print(connection.read(1000))
