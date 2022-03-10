@@ -3,9 +3,10 @@
 from abc import ABC, abstractmethod
 from enum import Enum, auto, unique
 from io import BufferedReader, BufferedWriter
-from typing import List, Optional
+from typing import List, Optional, cast
+import sys
 
-from Event import Event
+from Event import Event, EventMessagePost, EventJoin, EventLeave
 from Serial import (
     deserialize_long,
     deserialize_byte,
@@ -14,7 +15,10 @@ from Serial import (
     serialize_byte,
     serialize_list,
 )
-from PeerSocket import ProtocolException
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey as PrivateKey,
+)
+from PeerSocket import ProtocolException, EncryptedListener, EncryptedStream
 
 
 @unique
@@ -128,3 +132,44 @@ class PacketPostEvent(PacketBase):
 
     def serialize(self, stream: BufferedWriter) -> None:
         self._event.serialize(stream)
+
+
+def packet_test() -> None:
+    """Tests a pair of clients sending packets to each other."""
+    command = sys.argv[1]
+    if command == 'listen':
+        listener = EncryptedListener(
+            '0.0.0.0',
+            18457,
+            PrivateKey.generate(),
+            lambda k: True,
+        )
+        while True:
+            connection = listener.accept()
+            send_pkt = Packet(PacketGetEventsResp(
+                [
+                    Event(EventJoin('Alex')),
+                    Event(EventMessagePost(
+                        'Alex',
+                        1646873070000,
+                        'Hello World!',
+                    )),
+                    Event(EventLeave('Alex')),
+                ]
+            ))
+            send_pkt.serialize(cast(BufferedWriter, connection))
+            connection.close()
+
+    elif command == 'connect':
+        connection = EncryptedStream.connect(
+            sys.argv[2],
+            18457,
+            PrivateKey.generate(),
+            lambda k: True,
+        )
+        recv_pkt = Packet.deserialize(cast(BufferedReader, connection))
+        print(recv_pkt)
+
+
+if __name__ == '__main__':
+    packet_test()
