@@ -89,12 +89,12 @@ class EncryptedStream(BufferedIOBase):
         # This is annoying: if you look at the source code,
         # `sock.makefile` returns a BufferedRWPair, but mypy isn't
         # convinced of that.
-        buf = cast(BufferedRWPair, sock.makefile('rwb'))
+        bufferpair = cast(BufferedRWPair, sock.makefile('rwb'))
 
-        magic_number_check(buf)
-        c2s, s2c = key_exchange(buf, private_key, key_checker)
+        magic_number_check(bufferpair)
+        c2s, s2c = key_exchange(bufferpair, private_key, key_checker)
 
-        return EncryptedStream(buf, c2s, s2c)
+        return EncryptedStream(bufferpair, c2s, s2c)
 
     def write(self, data: Any) -> int:
         """Sends an array of bytes over the socket; throws an exception if the
