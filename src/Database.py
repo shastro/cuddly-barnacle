@@ -1,10 +1,12 @@
 """Generic Database Interface"""
 
+import datetime
 import logging
 import sqlite3
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
 from ipaddress import IPv4Address
+from sqlite3.dbapi2 import Date
 from typing import Any, Iterable, Optional
 
 from cryptography.hazmat.primitives import hashes
@@ -19,8 +21,8 @@ class ConnectionAlreadyExists(DatabaseException):
     """Raised when a database already has an active connection and an attempt is made to change it
     before `closing` the connection"""
 
-    def __init__(self, iconnection_name: Optional[str]):
-        self.connection_name = iconnection_name
+    def __init__(self, connection_name: Optional[str]):
+        self.connection_name = connection_name
         self.message = f"Connection <{self.connection_name}> already exists. Try closing the connection."
         super().__init__(self.message)
 
@@ -45,10 +47,10 @@ class QueryType(Enum):
 
 class TimeQuery():
 
-    def __init__(self, qtype: QueryType):
-        self.timestart
-        self.timeend
-        super().__init__()
+    def new(self, start: datetime.datetime, end: datetime.datetime, query_type: QueryType):
+        self.time_start = start
+        self.time_end = end
+        self.query_type = query_type
 
 class MatchQuery(ABC):
     """An abstract base class representing a database query that matches some list of properties exactly
