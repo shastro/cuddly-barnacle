@@ -189,7 +189,7 @@ class EncryptedListener:
 
     def __init__(
             self,
-            addr: str,
+            addr: Any,
             port: int,
             our_private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
