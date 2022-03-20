@@ -1,7 +1,11 @@
-"""This file implements the lowest-level connections to other peers,
-   and the basis of the ChatChat protocol. At this level, all we're
-   concerned with is connecting to single other computers via TCP/IP,
-   exchanging public keys, and getting secure connections."""
+"""Encrypted low-level connections.
+
+This file implements the lowest-level connections to other peers, and
+the basis of the ChatChat protocol. At this level, all we're concerned
+with is connecting to single other computers via TCP/IP, exchanging
+public keys, and getting secure connections.
+
+"""
 
 from io import BufferedIOBase, BufferedRWPair, BufferedWriter, BufferedReader
 from typing import Any, Callable, cast, Optional, Tuple
@@ -50,9 +54,15 @@ class EncryptedStream(BufferedIOBase):
             outgoing_key: bytes,
             incoming_key: bytes,
     ) -> None:
-        """Creates a new EncryptedStream that promises that the given buffered
-           socket can be used to send and receive encrypted traffic
-           with the given key."""
+        """Creates a new EncryptedStream.
+
+        The stream will send and receive encrypted data using the
+        given pair of keys: one for encrypting outgoing data, and
+        another for decrypting incoming data. (Due to the nature of a
+        stream cipher, these should always be different from each
+        other.)
+
+        """
         self._inner = inner
         self._incoming_key = incoming_key
         self._outgoing_key = outgoing_key
@@ -77,12 +87,18 @@ class EncryptedStream(BufferedIOBase):
             private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
     ) -> 'EncryptedStream':
-        """Establishes a connection to `other_addr`. Authenticates the
-           connection using `private_key`. Passes the public key the
-           peer sends through the provided `key_checker` function; if
-           the function returns `true`, then we accept their public
-           key, and if it returns `false`, we abort the connection and
-           raise an exception."""
+        """Establishes a new connection to `other_addr`.
+
+        This function uses public-key cryptography to generate a
+        shared pair of keys for sending traffic both ways, rather than
+        using pre-existing known keys. Authenticates the connection
+        using `private_key`. Passes the public key the peer sends
+        through the provided `key_checker` function; if the function
+        returns `true`, then we accept their public key, and if it
+        returns `false`, we abort the connection and raise an
+        exception.
+
+        """
         sock = socket.socket()
         sock.connect((other_addr, other_port))
 
@@ -97,10 +113,16 @@ class EncryptedStream(BufferedIOBase):
         return EncryptedStream(bufferpair, c2s, s2c)
 
     def write(self, data: Any) -> int:
-        """Sends an array of bytes over the socket; throws an exception if the
-           data cannot be sent. This function can be considered
-           secure: under no circumstances can an eavesdropper on the
-           wire be able to obtain `data`."""
+        """Sends an array of bytes over the socket.
+
+        Adds `data` to the buffer of bytes to be sent, and may or may
+        not send some amount of actual data over the wire; use
+        `flush()` to immediately send any remaining data. Throws an
+        exception if the data cannot be sent. This function can be
+        considered secure: under no circumstances can an eavesdropper
+        on the wire be able to obtain or modify `data`.
+
+        """
         if DRY_RUN:
             encrypted = data
         else:
@@ -108,10 +130,13 @@ class EncryptedStream(BufferedIOBase):
         return self._inner.write(encrypted)
 
     def read(self, n: Optional[int] = None) -> bytes:
-        """Receives an array of bytes from the socket; throws an exception if
-           a networking or security error occurs. The semantics of
-           this function are the same as those of
-           io.BufferedIOPair.read."""
+        """Receives an array of bytes from the socket.
+
+        Throws an exception if a networking or security error occurs.
+        The semantics of this function are the same as those of
+        io.BufferedIOPair.read.
+
+        """
         encrypted = self._inner.read(n)
         if DRY_RUN:
             return encrypted
@@ -119,19 +144,32 @@ class EncryptedStream(BufferedIOBase):
             return self._decryptor.update(encrypted)
 
     def flush(self) -> None:
-        """Immediately reads and writes any unwritten bytes from the
-           socket."""
+        """Sends any buffered bytes from the socket.
+
+        Immediately sends any bytes that have been queued using
+        `write`.
+
+        """
         self._inner.flush()
 
     def close(self) -> None:
-        """Closes the socket. After this function is called, `send` and `recv`
-           must never be used again on the socket."""
+        """Closes the socket.
+
+        After this function is called, the socket object becomes
+        invalidated, and no further member functions may be called.
+
+        """
         self._inner.close()
 
 
 class EncryptedListener:
-    """A socket that binds to an address and listens for encrypted
-       connections, and yields them as EncryptedStreams."""
+    """A listener for EncryptedStream connections.
+
+    A socket that binds to a TCP address and listens for connections,
+    performs key exchanges, and yields the authenticated, encrypted
+    connections as EncryptedStreams.
+
+    """
 
     def __init__(
             self,
@@ -140,16 +178,19 @@ class EncryptedListener:
             our_private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
     ) -> None:
-        """Create a new listener socket with the given address, port, and
-           private key. When remote peers connect to this listener,
-           pass the public key they send through the `key_checker`
-           function; if and only if it returns `true`, use their
-           public key and our private key to negotiate a secure,
-           encrypted connection, which is yielded as an
-           `EncryptedStream`.
+        """Create a new listener socket.
 
-           Throws an exception if binding to the address-port pair
-           fails."""
+        Uses the given address, port, and private key. When remote
+        peers connect to this listener, the EncryptedListener passes
+        the public key they send through the `key_checker` function;
+        if and only if it returns `true`, use their public key and our
+        private key to negotiate a secure, encrypted connection, which
+        is yielded as an `EncryptedStream`; otherwise, reject their
+        connection as a security violation.
+
+        Throws an exception if binding to the address-port pair fails.
+
+        """
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 
@@ -160,8 +201,12 @@ class EncryptedListener:
         self._key_checker = key_checker
 
     def accept(self) -> EncryptedStream:
-        """Waits for the next valid, encrypted connection to the listener
-           socket, and returns it as an encrypted stream."""
+        """Waits for the next EncryptedStream connection.
+
+        Waits for the next valid, encrypted connection to the listener
+        socket, and returns it as an encrypted stream.
+
+        """
         while True:
             try:
                 sock, _ret_addr = self._sock.accept()
@@ -184,8 +229,12 @@ class EncryptedListener:
 
 
 def magic_number_check(sock: BufferedRWPair) -> None:
-    """Sends the protocol's magic number over the socket, and expects the
-       machine on the other end to return the same magic number."""
+    """Checks that the remote machine is using the correct protocol.
+
+    Sends the protocol's magic number over the socket, and expects the
+    machine on the other end to return the same magic number.
+
+    """
     sock.write(MAGIC)
     sock.flush()
     if sock.read(len(MAGIC)) != MAGIC:
@@ -198,13 +247,17 @@ def key_exchange(
         key_checker: Callable[[PublicKey], bool],
 ) -> Tuple[bytes, bytes]:
     """Performs a key exchange over the socket with the given private key.
-       Checks the public key the peer sends with the function
-       `key_checker`; raises an exception if that function returns
-       `False`.
 
-       Returns a pair of keys: the first one for use when sending data
-       from the client to the server, and the second for use when
-       sending data from the server to the client."""
+    Checks the public key the peer sends with the function
+    `key_checker`; raises an exception if that function returns
+    `False`.
+
+    Returns a pair of keys: the first one for use when sending data
+    from the client to the server, and the second for use when sending
+    data from the server to the client. Which machine is the server
+    and which is the client is beyond the scope of this function.
+
+    """
     our_pk_bytes = private_key.public_key().public_bytes(
         encoding=Encoding.Raw,
         format=PublicFormat.Raw,

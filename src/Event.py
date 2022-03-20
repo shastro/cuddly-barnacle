@@ -28,8 +28,7 @@ from EncryptedStream import ProtocolException
 
 @unique
 class EventId(Enum):
-    """Types of events that are recorded within a ChatChat network's chat
-       history and propagated to every connected client."""
+    """Types of events."""
 
     # A user posted a chat message.
     MESSAGE_POST = auto()
@@ -54,8 +53,13 @@ class EventId(Enum):
 
 
 class Event:
-    """An event that should be recorded within a ChatChat network's
-       chat history and propagated to every connected client."""
+    """An event on the ChatChat network.
+
+    The defining feature of an 'event' is that each event should be
+    recorded within a ChatChat network's chat history, propagated to
+    every connected client, and remembered forever.
+
+    """
 
     def __init__(self, inner: 'EventBase') -> None:
         self._inner = inner

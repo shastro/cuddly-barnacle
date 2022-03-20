@@ -79,20 +79,26 @@ class PacketBase(ABC):
     @staticmethod
     @abstractmethod
     def deserialize(stream: BufferedReader) -> 'PacketBase':
-        """Read the packet's bytes from the network, and return the
-           represented packet object."""
+        """Read the packet's bytes from the network.
+
+        Return the represented packet object.
+
+        """
         pass
 
     @abstractmethod
     def serialize(self, stream: BufferedWriter) -> None:
-        """Convert the packet's content to bytes, and write them to the
-           network."""
+        """Converts the packet to bytes, and writes them to the network."""
         pass
 
 
 class PacketGetEvents(PacketBase):
-    """Request for events since a particular time (represented as a number
-       of nanoseconds past 1970-01-01)."""
+    """Request for events since a particular time.
+
+    The time is represented as a number of nanoseconds past
+    1970-01-01.
+
+    """
 
     def __init__(self, since: int) -> None:
         self._since = since
