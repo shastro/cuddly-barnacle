@@ -9,7 +9,7 @@ public keys, and getting secure connections.
 
 from io import BufferedIOBase, BufferedRWPair, BufferedWriter, BufferedReader
 from types import TracebackType
-from typing import Any, Callable, cast, Optional, Tuple, Type
+from typing import Any, Callable, cast, Optional, Tuple, Type, Union
 import socket
 import sys
 import time
@@ -189,7 +189,7 @@ class EncryptedListener:
 
     def __init__(
             self,
-            addr: Any,
+            addr: Union[int, str],
             port: int,
             our_private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
