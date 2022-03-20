@@ -16,8 +16,8 @@ import time
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
-    X25519PrivateKey as PrivateKey,
-    X25519PublicKey as PublicKey,
+    X25519PrivateKey as _PrivateKey,
+    X25519PublicKey as _PublicKey,
 )
 from cryptography.hazmat.primitives.ciphers import (
     algorithms,
@@ -32,6 +32,11 @@ from cryptography.hazmat.primitives.serialization import (
 )
 
 from Serial import serialize_bytes, deserialize_bytes
+
+# Explicit re-export so mypy doesn't complain if we re-use these in
+# other files.
+PrivateKey = _PrivateKey
+PublicKey = _PublicKey
 
 # Maximum number of simultaneous connections to allow in the backlog,
 # in the unlikely event that multiple clients connect between `accept`
