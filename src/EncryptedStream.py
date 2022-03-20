@@ -8,7 +8,8 @@ public keys, and getting secure connections.
 """
 
 from io import BufferedIOBase, BufferedRWPair, BufferedWriter, BufferedReader
-from typing import Any, Callable, cast, Optional, Tuple
+from types import TracebackType
+from typing import Any, Callable, cast, Optional, Tuple, Type
 import socket
 import sys
 import time
@@ -112,6 +113,16 @@ class EncryptedStream(BufferedIOBase):
 
         return EncryptedStream(bufferpair, c2s, s2c)
 
+    def __exit__(
+            self,
+            exc_type: Optional[Type[BaseException]],
+            exc_val: Optional[BaseException],
+            exc_tb: Optional[TracebackType]
+    ) -> None:
+        """Exits a `with` block."""
+        BufferedIOBase.__exit__(self, exc_type, exc_val, exc_tb)
+        self._inner.close()
+
     def write(self, data: Any) -> int:
         """Sends an array of bytes over the socket.
 
@@ -199,6 +210,18 @@ class EncryptedListener:
 
         self._private_key = our_private_key
         self._key_checker = key_checker
+
+    def __enter__(self) -> 'EncryptedListener':
+        return self
+
+    def __exit__(
+            self,
+            exc_type: Optional[Type[BaseException]],
+            exc_val: Optional[BaseException],
+            exc_tb: Optional[TracebackType]
+    ) -> None:
+        """Exits a `with` block."""
+        self._sock.close()
 
     def accept(self) -> EncryptedStream:
         """Waits for the next EncryptedStream connection.
@@ -302,33 +325,28 @@ class ProtocolException(Exception):
 def basic_test() -> None:
     command = sys.argv[1]
     if command == 'listen':
-        listener = EncryptedListener(
-            '0.0.0.0',
-            18457,
-            PrivateKey.generate(),
-            lambda k: True,
-        )
-        while True:
-            connection = listener.accept()
-
-            # Test buffering
-            connection.write(b'Hello ')
-            connection.flush()
-            time.sleep(1)
-            connection.write(b'World!')
-
-            connection.close()
+        with EncryptedListener(
+                '0.0.0.0',
+                18457,
+                PrivateKey.generate(),
+                lambda k: True,
+        ) as listener:
+            while True:
+                with listener.accept() as connection:
+                    # Test buffering
+                    connection.write(b'Hello ')
+                    connection.flush()
+                    time.sleep(1)
+                    connection.write(b'World!')
 
     elif command == 'connect':
-        connection = EncryptedStream.connect(
-            sys.argv[2],
-            18457,
-            PrivateKey.generate(),
-            lambda k: True,
-        )
-
-        print(connection.read(1000))
-        connection.close()
+        with EncryptedStream.connect(
+                sys.argv[2],
+                18457,
+                PrivateKey.generate(),
+                lambda k: True,
+        ) as connection:
+            print(connection.read(1000))
 
     else:
         print('unknown command ' + command)
