@@ -18,7 +18,11 @@ from Serial import (
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey as PrivateKey,
 )
-from PeerSocket import ProtocolException, EncryptedListener, EncryptedStream
+from EncryptedStream import (
+    ProtocolException,
+    EncryptedListener,
+    EncryptedStream
+)
 
 
 @unique

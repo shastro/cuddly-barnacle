@@ -23,7 +23,7 @@ from Serial import (
     serialize_long,
     serialize_byte,
 )
-from PeerSocket import ProtocolException
+from EncryptedStream import ProtocolException
 
 
 @unique
