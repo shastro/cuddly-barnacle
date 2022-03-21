@@ -265,8 +265,13 @@ def magic_number_check(sock: BufferedRWPair) -> None:
     """
     sock.write(MAGIC)
     sock.flush()
-    if sock.read(len(MAGIC)) != MAGIC:
-        raise ProtocolException('received incorrect magic number')
+    response = sock.read(len(MAGIC))
+    if response != MAGIC:
+        response_str = response.decode('utf-8', errors='replace')
+        magic_str = MAGIC.decode('utf-8', errors='replace')
+        raise VersionException(
+            f'got magic number "{response_str}", expected "{magic_str}"'
+        )
 
 
 def key_exchange(
@@ -303,7 +308,7 @@ def key_exchange(
     )))
 
     if not key_checker(their_pk):
-        raise ProtocolException("rejected peer's public key")
+        raise SecurityException("rejected peer's public key")
 
     shared_key = private_key.exchange(their_pk)
 
@@ -325,6 +330,26 @@ def key_exchange(
 
 class ProtocolException(Exception):
     """An exception that occurs at the protocol level."""
+
+    def __init__(self, reason: str):
+        message = f'protocol error: {reason}'
+        super().__init__(message)
+
+
+class VersionException(ProtocolException):
+    """Raised when we're communicating with a different program version."""
+
+    def __init__(self, reason: str):
+        message = f'peer returned wrong magic number: {reason}'
+        super().__init__(message)
+
+
+class SecurityException(ProtocolException):
+    """Raised when security cannot be guaranteed."""
+
+    def __init__(self, reason: str):
+        message = f'security error: {reason}'
+        super().__init__(message)
 
 
 def basic_test() -> None:
