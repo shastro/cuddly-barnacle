@@ -10,7 +10,6 @@ from sqlite3.dbapi2 import Date
 from typing import Any, Iterable, Optional
 
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.x25519 import ,, as
 
 
 class DatabaseException(Exception):
