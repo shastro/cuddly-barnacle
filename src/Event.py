@@ -5,9 +5,6 @@ from enum import Enum, auto, unique
 from io import BufferedReader, BufferedWriter
 from typing import Optional
 
-from cryptography.hazmat.primitives.asymmetric.x25519 import (
-    X25519PublicKey as PublicKey,
-)
 from cryptography.hazmat.primitives.serialization import (
     Encoding,
     PublicFormat,
@@ -23,7 +20,10 @@ from Serial import (
     serialize_long,
     serialize_byte,
 )
-from EncryptedStream import ProtocolException
+from EncryptedStream import (
+    ProtocolException,
+    PublicKey,
+)
 
 
 @unique

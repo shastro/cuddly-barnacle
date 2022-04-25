@@ -66,7 +66,9 @@ class MatchQuery(ABC):
     IE these types of queries
     Works to select a property from a column of a table provided it is on the same row as at least one property queried.
     """
+
     def __init__():
+        pass
 
 
 class HashQuery(MatchQuery):
