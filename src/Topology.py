@@ -7,12 +7,18 @@ state of the network.
 """
 
 from abc import ABC
-from typing import List
+from io import BufferedReader
+from typing import List, cast, Tuple
 import random
+import select
 
-from EncryptedStream import EncryptedStream, PublicKey, PrivateKey
-
-PORT_NUMBER = 18457
+from EncryptedStream import (
+    EncryptedStream,
+    EncryptedListener,
+    PublicKey,
+    PrivateKey,
+)
+from Packets import Packet
 
 
 class NodeState(ABC):
@@ -33,13 +39,43 @@ class StableState(NodeState):
 
     def __init__(
             self,
+            info: 'NodeInfo',
             predecessor: EncryptedStream,
             successor: EncryptedStream,
     ):
+        self._info = info
         self._pred = predecessor
         self._succ = successor
 
     def run(self) -> NodeState:
+        """Run the state until it progresses to another state.
+
+        The stable state:
+        - Receives messages from the predecessor, and propagates them
+          to its successor. (Synchronization messages.)
+        - Receives input from the user.
+        - Awaits connections from the outside world, and when one is
+          found, progresses to the hub state.
+
+        """
+        readable, writable, exception = select.select(
+            [self._pred, self._info.listener._sock],       # read
+            [],                                            # write
+            [self._pred, self._succ, self._info.listener]  # except
+        )
+
+        if self._pred in readable:
+            # Message received
+            packet = Packet.deserialize(cast(BufferedReader, self._pred))
+            self.interpret_packet(packet)
+        if self._info.listener._sock in readable:
+            # Connection received
+            conn, addr = self._info.listener.accept()
+            return HubState(self._info, self._pred, self._succ, conn, addr)
+
+        return self
+
+    def interpret_packet(self, packet: Packet):
         pass
 
 
@@ -54,10 +90,13 @@ class HubState(NodeState):
 
     def __init__(
             self,
+            info: 'NodeInfo',
             predecessor: EncryptedStream,
             successor: EncryptedStream,
             extra: EncryptedStream,
+            extra_addr: 'PeerAddress',
     ):
+        self._info = info
         self._pred = predecessor
         self._succ = successor
         self._extra = extra
@@ -76,8 +115,10 @@ class SpokeState(NodeState):
 
     def __init__(
             self,
+            info: 'NodeInfo',
             entry_point: EncryptedStream,
     ):
+        self._info = info
         self._entry_point = entry_point
 
     def run(self) -> NodeState:
@@ -92,15 +133,53 @@ class SolitaryState(NodeState):
 
     """
 
-    def __init__(self) -> None:
-        pass
+    def __init__(
+            self,
+            info: 'NodeInfo',
+    ) -> None:
+        self._info = info
 
     def run(self) -> NodeState:
-        pass
+        """Runs the state until it progresses to another state.
+
+        The solitary state:
+        - Receives input from the user.
+        - Awaits connections from the outside world, and when one is
+          found, progresses to the stable state.
+        """
+        pred, (pred_addr, port) = self._info.listener.accept()
+        succ = EncryptedStream.connect(
+            pred_addr,
+            port,
+            self._info.private_key,
+            lambda k: k in self._info.allowed_keys,
+        )
+
+        return StableState(
+            info=self._info,
+            predecessor=pred,
+            successor=succ,
+        )
+
+
+class NodeInfo:
+    def __init__(
+            self,
+            listener: EncryptedListener,
+            allowed_keys: List[PublicKey],
+            private_key: PrivateKey,
+    ) -> None:
+        self.listener = listener
+        self.allowed_keys = allowed_keys
+        self.private_key = private_key
+
+
+PeerAddress = Tuple[str, int]
 
 
 def initialize(
-        peer_addrs: List[str],
+        my_addr: PeerAddress,
+        peer_addrs: List[PeerAddress],
         peer_keys: List[PublicKey],
         private_key: PrivateKey,
 ) -> NodeState:
@@ -112,22 +191,41 @@ def initialize(
     authenticate to the peers.
 
     """
+    listener = EncryptedListener(
+        my_addr[0],
+        my_addr[1],
+        private_key,
+        lambda key: key in peer_keys
+    )
+
+    node_info = NodeInfo(
+        listener=listener,
+        allowed_keys=peer_keys,
+        private_key=private_key,
+    )
+
     peer_addrs_shuf = peer_addrs.copy()
     random.shuffle(peer_addrs_shuf)
     for addr in peer_addrs_shuf:
         try:
             connection = EncryptedStream.connect(
-                addr,
-                PORT_NUMBER,
+                addr[0],
+                addr[1],
                 private_key,
                 lambda key: key in peer_keys
             )
-            return SpokeState(entry_point=connection)
+            return SpokeState(
+                info=node_info,
+                entry_point=connection,
+            )
         except ConnectionRefusedError or TimeoutError as _err:
-            # Peer is offline, just try other peers.
+            # Peer is offline, just try other peers and don't report
+            # the error.
             id(_err)
             pass
-    return SolitaryState()
+    return SolitaryState(
+        info=node_info,
+    )
 
 
 def topology_test() -> None:
