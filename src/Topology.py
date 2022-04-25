@@ -11,6 +11,7 @@ from io import BufferedReader
 from typing import List, cast
 import random
 import select
+import sys
 
 from EncryptedStream import (
     EncryptedStream,
@@ -60,6 +61,8 @@ class StableState(NodeState):
           found, progresses to the hub state.
 
         """
+        print('Entering stable state')
+
         readable, writable, exception = select.select(
             [self._pred, self._info.listener._sock],  # read
             [],                                       # write
@@ -105,7 +108,11 @@ class HubState(NodeState):
         self._extra_addr = extra_addr
 
     def run(self) -> NodeState:
-        pass
+        print('Entering hub state')
+
+        # TODO: Implement this. This is just here to make the type
+        # checker shut up.
+        return cast(NodeState, None)
 
 
 class SpokeState(NodeState):
@@ -125,7 +132,11 @@ class SpokeState(NodeState):
         self._entry_point = entry_point
 
     def run(self) -> NodeState:
-        pass
+        print('Entering spoke state')
+
+        # TODO: Implement this. This is just here to make the type
+        # checker shut up.
+        return cast(NodeState, None)
 
 
 class SolitaryState(NodeState):
@@ -150,6 +161,8 @@ class SolitaryState(NodeState):
         - Awaits connections from the outside world, and when one is
           found, progresses to the stable state.
         """
+        print('Entering solitary state')
+
         pred, pred_addr = self._info.listener.accept()
         succ = EncryptedStream.connect(
             pred_addr,
@@ -226,7 +239,24 @@ def initialize(
 
 
 def topology_test() -> None:
-    print('Hello World!')
+    local_addr_str = sys.argv[1]
+    peer_addrs_str = sys.argv[2:]
+
+    def parse_addr(addr: str) -> PeerAddress:
+        host, port = addr.split(':', maxsplit=1)
+        return host, int(port)
+
+    local_addr = parse_addr(local_addr_str)
+    peer_addrs = list(map(parse_addr, peer_addrs_str))
+
+    state = initialize(
+        local_addr,
+        peer_addrs,
+        [],
+        PrivateKey.generate()
+    )
+    while True:
+        state = state.run()
 
 
 if __name__ == '__main__':
