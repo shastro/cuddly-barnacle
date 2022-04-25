@@ -6,17 +6,19 @@ state of the network.
 
 """
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from io import BufferedReader
-from typing import List, cast, Tuple
+from typing import List, cast
 import random
 import select
+import sys
 
 from EncryptedStream import (
     EncryptedStream,
     EncryptedListener,
     PublicKey,
     PrivateKey,
+    PeerAddress,
 )
 from Packets import Packet
 
@@ -24,6 +26,7 @@ from Packets import Packet
 class NodeState(ABC):
     """The network state of a single node."""
 
+    @abstractmethod
     def run(self) -> 'NodeState':
         pass
 
@@ -58,10 +61,12 @@ class StableState(NodeState):
           found, progresses to the hub state.
 
         """
+        print('Entering stable state')
+
         readable, writable, exception = select.select(
-            [self._pred, self._info.listener._sock],       # read
-            [],                                            # write
-            [self._pred, self._succ, self._info.listener]  # except
+            [self._pred, self._info.listener._sock],  # read
+            [],                                       # write
+            [],                                       # except
         )
 
         if self._pred in readable:
@@ -100,9 +105,14 @@ class HubState(NodeState):
         self._pred = predecessor
         self._succ = successor
         self._extra = extra
+        self._extra_addr = extra_addr
 
     def run(self) -> NodeState:
-        pass
+        print('Entering hub state')
+
+        # TODO: Implement this. This is just here to make the type
+        # checker shut up.
+        return cast(NodeState, None)
 
 
 class SpokeState(NodeState):
@@ -122,7 +132,11 @@ class SpokeState(NodeState):
         self._entry_point = entry_point
 
     def run(self) -> NodeState:
-        pass
+        print('Entering spoke state')
+
+        # TODO: Implement this. This is just here to make the type
+        # checker shut up.
+        return cast(NodeState, None)
 
 
 class SolitaryState(NodeState):
@@ -147,10 +161,11 @@ class SolitaryState(NodeState):
         - Awaits connections from the outside world, and when one is
           found, progresses to the stable state.
         """
-        pred, (pred_addr, port) = self._info.listener.accept()
+        print('Entering solitary state')
+
+        pred, pred_addr = self._info.listener.accept()
         succ = EncryptedStream.connect(
             pred_addr,
-            port,
             self._info.private_key,
             lambda k: k in self._info.allowed_keys,
         )
@@ -174,9 +189,6 @@ class NodeInfo:
         self.private_key = private_key
 
 
-PeerAddress = Tuple[str, int]
-
-
 def initialize(
         my_addr: PeerAddress,
         peer_addrs: List[PeerAddress],
@@ -192,8 +204,7 @@ def initialize(
 
     """
     listener = EncryptedListener(
-        my_addr[0],
-        my_addr[1],
+        my_addr,
         private_key,
         lambda key: key in peer_keys
     )
@@ -209,8 +220,7 @@ def initialize(
     for addr in peer_addrs_shuf:
         try:
             connection = EncryptedStream.connect(
-                addr[0],
-                addr[1],
+                addr,
                 private_key,
                 lambda key: key in peer_keys
             )
@@ -229,7 +239,24 @@ def initialize(
 
 
 def topology_test() -> None:
-    print('Hello World!')
+    local_addr_str = sys.argv[1]
+    peer_addrs_str = sys.argv[2:]
+
+    def parse_addr(addr: str) -> PeerAddress:
+        host, port = addr.split(':', maxsplit=1)
+        return host, int(port)
+
+    local_addr = parse_addr(local_addr_str)
+    peer_addrs = list(map(parse_addr, peer_addrs_str))
+
+    state = initialize(
+        local_addr,
+        peer_addrs,
+        [],
+        PrivateKey.generate()
+    )
+    while True:
+        state = state.run()
 
 
 if __name__ == '__main__':
