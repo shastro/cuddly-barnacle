@@ -50,6 +50,10 @@ MAGIC = b'ChatChat\n'
 # easier when debugging with Wireshark.
 DRY_RUN = False
 
+# If this is `True`, don't check keys. This is extremely insecure and
+# should not be used in production.
+DISABLE_KEY_CHECK = False
+
 # Address of a computer within the network we're using. In this case,
 # it's an IP address-port number pair.
 PeerAddress = Tuple[str, int]
@@ -310,7 +314,7 @@ def key_exchange(
         cast(BufferedReader, sock)
     )))
 
-    if not key_checker(their_pk):
+    if not (DISABLE_KEY_CHECK or key_checker(their_pk)):
         raise SecurityException("rejected peer's public key")
 
     shared_key = private_key.exchange(their_pk)
