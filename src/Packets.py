@@ -179,6 +179,7 @@ def packet_test() -> None:
 
     elif command == 'connect':
         connection = EncryptedStream.connect(
+            ('0.0.0.0', 18457),
             (sys.argv[2], 18457),
             PrivateKey.generate(),
             lambda k: True,

@@ -31,7 +31,12 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from Serial import serialize_bytes, deserialize_bytes
+from Serial import (
+    serialize_bytes,
+    deserialize_bytes,
+    serialize_long,
+    deserialize_long,
+)
 
 # Explicit re-export so mypy doesn't complain if we re-use these in
 # other files.
@@ -48,11 +53,11 @@ MAGIC = b'ChatChat\n'
 
 # If this is `True`, don't actually encrypt messages. Makes life a bit
 # easier when debugging with Wireshark.
-DRY_RUN = False
+DRY_RUN = True
 
 # If this is `True`, don't check keys. This is extremely insecure and
 # should not be used in production.
-DISABLE_KEY_CHECK = False
+DISABLE_KEY_CHECK = True
 
 # Address of a computer within the network we're using. In this case,
 # it's an IP address-port number pair.
@@ -96,6 +101,7 @@ class EncryptedStream(BufferedIOBase):
 
     @staticmethod
     def connect(
+            our_addr: PeerAddress,
             other_addr: PeerAddress,
             private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
@@ -121,7 +127,12 @@ class EncryptedStream(BufferedIOBase):
         bufferpair = cast(BufferedRWPair, sock.makefile('rwb'))
 
         magic_number_check(bufferpair)
-        c2s, s2c = key_exchange(bufferpair, private_key, key_checker)
+        their_addr, c2s, s2c = key_exchange(
+            bufferpair,
+            private_key,
+            our_addr,
+            key_checker,
+        )
 
         return EncryptedStream(bufferpair, c2s, s2c)
 
@@ -214,8 +225,9 @@ class EncryptedListener:
 
         """
 
-        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
+        self._addr = addr
 
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
         self._sock.bind(addr)
         self._sock.listen(BACKLOG)
 
@@ -252,9 +264,10 @@ class EncryptedListener:
                 # doesn't send any data.
                 magic_number_check(buf)
 
-                c2s, s2c = key_exchange(
+                addr, c2s, s2c = key_exchange(
                     buf,
                     self._private_key,
+                    self._addr,
                     self._key_checker
                 )
                 return (EncryptedStream(buf, s2c, c2s), addr)
@@ -281,21 +294,24 @@ def magic_number_check(sock: BufferedRWPair) -> None:
         )
 
 
+# TODO: rename to `handshake`
 def key_exchange(
         sock: BufferedRWPair,
         private_key: PrivateKey,
+        local_addr: PeerAddress,
         key_checker: Callable[[PublicKey], bool],
-) -> Tuple[bytes, bytes]:
+) -> Tuple[PeerAddress, bytes, bytes]:
     """Performs a key exchange over the socket with the given private key.
 
     Checks the public key the peer sends with the function
     `key_checker`; raises an exception if that function returns
     `False`.
 
-    Returns a pair of keys: the first one for use when sending data
-    from the client to the server, and the second for use when sending
-    data from the server to the client. Which machine is the server
-    and which is the client is beyond the scope of this function.
+    Returns the address to use for reconnecting to the peer, as well
+    as a pair of keys: the first one for use when sending data from
+    the client to the server, and the second for use when sending data
+    from the server to the client. Which machine is the server and
+    which is the client is beyond the scope of this function.
 
     """
     our_pk_bytes = private_key.public_key().public_bytes(
@@ -319,7 +335,29 @@ def key_exchange(
 
     shared_key = private_key.exchange(their_pk)
 
+    # Send and receive listener socket addresses. This might be
+    # redundant in most cases, but allows clients to run nodes on
+    # different ports, which is especially important for debugging.
+    serialize_bytes(
+        cast(BufferedWriter, sock),
+        local_addr[0].encode('utf-8'),
+    )
+    serialize_long(
+        cast(BufferedWriter, sock),
+        local_addr[1]
+    )
+
+    sock.flush()
+    their_ip = deserialize_bytes(
+        cast(BufferedReader, sock)
+    ).decode('utf-8')
+    their_port = deserialize_long(
+        cast(BufferedReader, sock)
+    )
+    their_addr = (their_ip, their_port)
+
     return (
+        their_addr,
         HKDF(
             algorithm=hashes.SHA256(),
             length=32,
@@ -381,6 +419,7 @@ def basic_test() -> None:
 
     elif command == 'connect':
         with EncryptedStream.connect(
+                ('0.0.0.0', 18457),
                 (sys.argv[2], 18457),
                 PrivateKey.generate(),
                 lambda k: True,

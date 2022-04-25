@@ -164,7 +164,9 @@ class SolitaryState(NodeState):
         print('Entering solitary state')
 
         pred, pred_addr = self._info.listener.accept()
+        print(f'Got new connection to {pred_addr}, trying to connect back')
         succ = EncryptedStream.connect(
+            self._info.local_addr,
             pred_addr,
             self._info.private_key,
             lambda k: k in self._info.allowed_keys,
@@ -181,10 +183,12 @@ class NodeInfo:
     def __init__(
             self,
             listener: EncryptedListener,
+            local_addr: PeerAddress,
             allowed_keys: List[PublicKey],
             private_key: PrivateKey,
     ) -> None:
         self.listener = listener
+        self.local_addr = local_addr
         self.allowed_keys = allowed_keys
         self.private_key = private_key
 
@@ -211,6 +215,7 @@ def initialize(
 
     node_info = NodeInfo(
         listener=listener,
+        local_addr=my_addr,
         allowed_keys=peer_keys,
         private_key=private_key,
     )
@@ -220,18 +225,22 @@ def initialize(
     for addr in peer_addrs_shuf:
         try:
             connection = EncryptedStream.connect(
+                my_addr,
                 addr,
                 private_key,
                 lambda key: key in peer_keys
             )
+            print(f'Note: connected to peer {addr}')
+
             return SpokeState(
                 info=node_info,
                 entry_point=connection,
             )
-        except ConnectionRefusedError or TimeoutError as _err:
+        except ConnectionRefusedError or TimeoutError as err:
             # Peer is offline, just try other peers and don't report
             # the error.
-            id(_err)
+            print(f'Note: peer {addr} is unreachable: {err}')
+            id(err)
             pass
     return SolitaryState(
         info=node_info,
