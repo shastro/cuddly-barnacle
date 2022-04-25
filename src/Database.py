@@ -7,10 +7,13 @@ from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
 from ipaddress import IPv4Address
 from sqlite3.dbapi2 import Date
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Union
 
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric.x25519 import ,, as
+from cryptography.hazmat.primitives.asymmetric.x25519 import (
+    X25519PrivateKey as PrivateKey,
+    X25519PublicKey as PublicKey,
+)
 
 
 class DatabaseException(Exception):
@@ -36,8 +39,11 @@ class ConnectionAlreadyClosed(DatabaseException):
         super().__init__(self.message)
 
 
+"""Still Not sure how I am going to do Queries"""
+
+
 @unique
-class QueryType(Enum):
+class Query(Enum):
     """Enum to identify the different query types"""
 
     HASH = auto()
@@ -45,19 +51,22 @@ class QueryType(Enum):
     IP = auto()
     PUBKEY = auto()
 
-class TimeQuery():
 
-    def new(self, start: datetime.datetime, end: datetime.datetime, query_type: QueryType):
+class TimeQuery:
+    def __init__(
+        self, start: datetime.datetime, end: datetime.datetime, query_type: QueryType
+    ):
         self.time_start = start
         self.time_end = end
-        self.query_type = query_type
+        self.item = query_type
+
 
 class MatchQuery(ABC):
     """An abstract base class representing a database query that matches some list of properties exactly
     IE these types of queries
+    Works to select a property from a column of a table provided it is on the same row as at least one property queried.
     """
-
-    pass
+    def __init__():
 
 
 class HashQuery(MatchQuery):
@@ -151,7 +160,8 @@ class SQLiteDB(Database):
             logging.warning("Closed connection without committing changes")
         self.connection.close()
 
-    def eventQuery(self):
+    def eventQuery(self, query: Union[TimeQuery, HashQuery]):
+        """Find all the requested events based on either a TimeQuery, or HashQuery"""
         pass
 
     def ipQuery(self):
