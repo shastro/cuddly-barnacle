@@ -157,8 +157,7 @@ def packet_test() -> None:
     command = sys.argv[1]
     if command == 'listen':
         listener = EncryptedListener(
-            '0.0.0.0',
-            18457,
+            ('0.0.0.0', 18457),
             PrivateKey.generate(),
             lambda k: True,
         )
@@ -180,8 +179,7 @@ def packet_test() -> None:
 
     elif command == 'connect':
         connection = EncryptedStream.connect(
-            sys.argv[2],
-            18457,
+            (sys.argv[2], 18457),
             PrivateKey.generate(),
             lambda k: True,
         )

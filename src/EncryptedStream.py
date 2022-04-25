@@ -9,7 +9,7 @@ public keys, and getting secure connections.
 
 from io import BufferedIOBase, BufferedRWPair, BufferedWriter, BufferedReader
 from types import TracebackType
-from typing import Any, Callable, cast, Optional, Tuple, Type, Union
+from typing import Any, Callable, cast, Optional, Tuple, Type
 import socket
 import sys
 import time
@@ -50,6 +50,10 @@ MAGIC = b'ChatChat\n'
 # easier when debugging with Wireshark.
 DRY_RUN = False
 
+# Address of a computer within the network we're using. In this case,
+# it's an IP address-port number pair.
+PeerAddress = Tuple[str, int]
+
 
 class EncryptedStream(BufferedIOBase):
     """An encrypted network connection to another computer."""
@@ -88,8 +92,7 @@ class EncryptedStream(BufferedIOBase):
 
     @staticmethod
     def connect(
-            other_addr: str,
-            other_port: int,
+            other_addr: PeerAddress,
             private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
     ) -> 'EncryptedStream':
@@ -106,7 +109,7 @@ class EncryptedStream(BufferedIOBase):
 
         """
         sock = socket.socket()
-        sock.connect((other_addr, other_port))
+        sock.connect(other_addr)
 
         # This is annoying: if you look at the source code,
         # `sock.makefile` returns a BufferedRWPair, but mypy isn't
@@ -189,8 +192,7 @@ class EncryptedListener:
 
     def __init__(
             self,
-            addr: Union[int, str],
-            port: int,
+            addr: PeerAddress,
             our_private_key: PrivateKey,
             key_checker: Callable[[PublicKey], bool],
     ) -> None:
@@ -210,7 +212,7 @@ class EncryptedListener:
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM, 0)
 
-        self._sock.bind((addr, port))
+        self._sock.bind(addr)
         self._sock.listen(BACKLOG)
 
         self._private_key = our_private_key
@@ -228,7 +230,7 @@ class EncryptedListener:
         """Exits a `with` block."""
         self._sock.close()
 
-    def accept(self) -> Tuple[EncryptedStream, Tuple[str, int]]:
+    def accept(self) -> Tuple[EncryptedStream, PeerAddress]:
         """Waits for the next EncryptedStream connection.
 
         Waits for the next valid, encrypted connection to the listener
@@ -238,7 +240,7 @@ class EncryptedListener:
         """
         while True:
             try:
-                sock, (addr, port) = self._sock.accept()
+                sock, addr = self._sock.accept()
                 buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
                 # BUG: These are blocking operations, which will lock
@@ -251,7 +253,7 @@ class EncryptedListener:
                     self._private_key,
                     self._key_checker
                 )
-                return EncryptedStream(buf, s2c, c2s), (addr, port)
+                return (EncryptedStream(buf, s2c, c2s), addr)
 
             except Exception as e:
                 print('Warning: rejected incoming connection: ' + str(e))
@@ -357,8 +359,7 @@ def basic_test() -> None:
     command = sys.argv[1]
     if command == 'listen':
         with EncryptedListener(
-                '0.0.0.0',
-                18457,
+                ('0.0.0.0', 18457),
                 PrivateKey.generate(),
                 lambda k: True,
         ) as listener:
@@ -376,8 +377,7 @@ def basic_test() -> None:
 
     elif command == 'connect':
         with EncryptedStream.connect(
-                sys.argv[2],
-                18457,
+                (sys.argv[2], 18457),
                 PrivateKey.generate(),
                 lambda k: True,
         ) as connection:
