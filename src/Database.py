@@ -4,47 +4,176 @@ This file implements the database interface for the application data on the syst
 
 This system is interfaced with the synchronization system as well as the frontend.
 
+
+The structure of the database is as follows
+
+Accepted IP table
+- IPv4 addr - Last seen timestamp - trust flag
+
+Accepted PubKey Table
+- PubKey - Last seen timestamp - trust flag
+
+Event Table
+- recv timestamp - event hash - event blob
+
+We store trust flags since we might want to know who is banned or not.
+
 """
-import hashlib
-from _hashlib import HASH
 import datetime
+import hashlib
 import logging
 import sqlite3
+import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
 from ipaddress import IPv4Address
 from sqlite3.dbapi2 import Date
-from typing import Any, Iterable, Optional, Union, List
+from typing import (
+    Any,
+    Callable,
+    Generic,
+    Hashable,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
-# Project Imports
-from EncryptedStream import PublicKey, PrivateKey
-
-
-# @unique
-# class QueryType(Enum):
-#     """Enum to identify the different query types"""
-
-#     HASH = auto()
-#     EVENT = auto()
-#     IP = auto()
-#     PUBKEY = auto()
-
-
-class TimeQuery:
-    def __init__(self, start: datetime.datetime, end: datetime.datetime):
-        self.time_start = start
-        self.time_end = end
+from EncryptedStream import PrivateKey, PublicKey
+from _hashlib import HASH
 
 
-class HashQuery:
-    def __init__(self, hashes: List[HASH]):
+# Generic Type Var
+T = TypeVar("T")
+DateTime = datetime.datetime
+
+
+@unique
+class QueryType(Enum):
+    """Enum to identify the different query types
+
+    These represent the fields you are intending to match on.
+    """
+
+    HASH = auto()
+    EVENT = auto()
+    IP = auto()
+    PUBKEY = auto()
+
+
+@unique
+class WriteType(Enum):
+    """Enum to represent the kind of write operation you want to perform to the database
+
+    DELETE - Delete all objects from the database that match the given property
+    SYNC   - Sync the database contents to the list given. Delete all that do not match the set given
+    APPEND - Append to the database the given set of objects
+    """
+
+    DELETE = auto()
+    SYNC = auto()
+    APPEND = auto()
+
+
+class Query(ABC):
+    def get_data(self) -> List[T]:  # type: ignore
+        pass
+
+
+class HashQuery(Query):
+    """Class representing a query to the database looking for matches on other properties that match the list of hashes."""
+
+    def __init__(
+        self, hashes: List[HASH], start: DateTime = None, end: DateTime = None
+    ):
         self._hashes = hashes
+        self._time_start = start
+        self._time_end = end
+
+    def get_data(self):
+        return self._hashes
+
+    # def get_time_range(self):
+    #     return (self._time_start, self._time_end)
+
+
+class IPQuery(Query):
+    def __init__(
+        self, ipaddrs: List[IPv4Address], start: DateTime = None, end: DateTime = None
+    ):
+        self._ips = ipaddrs
+        self._time_start = start
+        self._time_end = end
+
+    def get_data(self):
+        return self._ips
+
+
+class EventQuery(Query):
+    def __init__(
+        self, eventblobs: List[bytearray], start: DateTime = None, end: DateTime = None
+    ):
+        self._eventblobs = eventblobs
+        self._time_start = start
+        self._time_end = end
+
+    def get_data(self):
+        return self._eventblobs
+
+
+class PubKeyQuery(Query):
+    def __init__(
+        self, keys: List[PublicKey], start: DateTime = None, end: DateTime = None
+    ):
+        self._keys = keys
+        self._time_start = start
+        self._time_end = end
+
+    def get_data(self):
+        return self._keys
+
+
+# DecoratorClass
+class TimeQuery(Query):
+    """TimeQuery is a decorator class over a normal query.
+
+    It can be used to filter the data written to or returned from the database
+    using datetime objects.
+
+    """
+
+    def __init__(self, cls: Query, start: DateTime, end: DateTime):
+        self._cls = cls
+        self._start = start
+        self._end = end
+
+    def get_data(self):
+        return (self._cls.get_data(), self._start, self._end)
+
+
+# Database API Ideas
+# db.write(PubKeySelector([key1, key2, key3]), WriteType.APPEND)
+# db.query(TimeFilter(PubKeySelector(None))) Returns everything every PubKeyItem
+# db.query(TimeFilter(PubKeySelector([]))) Returns no items
+
+
+class DatabaseItem(ABC):
+    """Abstract Base Class for database items"""
+
+    def serialize():
+        pass
+
+    def deserialize():
+        pass
 
 
 class SQLiteDB:
     """SQLiteDB abstraction over the sqlite3 interface.
 
-    Designed to be used with our system and supportsthe specific kinds of queries we are interested in.
+    Designed to be used with our system and supportsthe specific kinds of
+    queries we are interested in.
 
     """
 
@@ -59,8 +188,9 @@ class SQLiteDB:
     def createEmpty(self, ifname: str, force: bool = False):
         """Create an empty database with our specified format.
 
-        Will not by default overwrite an existing database unless the `force` flag is specified.
-        This function establishes connection to the sqlite3 file and creates a cursor object.
+        Will not by default overwrite an existing database unless the `force`
+        flag is specified. This function establishes connection to the sqlite3
+        file and creates a cursor object.
 
         """
 
@@ -91,53 +221,23 @@ class SQLiteDB:
             logging.warning("Closed connection without committing changes")
         self.connection.close()
 
-    def eventQuery(self, query: Union[TimeQuery, HashQuery]):
-        """Return the requested events based on either a TimeQuery, or HashQuery
+    def query(self, query: Query):
+        """Return the requested information based on a query type, which may be decorated.
 
-        Also returns the timing information, the associated hash, and the event blob.
+        Returns a databaseItem, representing a row in the database
         """
+        match query:
+            case HashQuery:
+                print("You have a HashQuery")
 
-        if type(query) == TimeQuery:
-            pass
+            # raise InvalidQuery("Invalid Query Type in Function eventQuery")
 
-        elif type(query) == HashQuery:
-            pass
+    def write(self, keys: Query, write_type: WriteType = WriteType.APPEND):
+        """Will write to the list of publicKeys in the database.
 
-        else:
-            raise InvalidQuery("Invalid Query Type in Function eventQuery")
-
-    def ipQuery(self):
-        """Return all the valid ip addresses in the database"""
-        pass
-
-    def pubkeyQuery(self):
-        """Return the valid publickeys in the database"""
-        pass
-
-    def hashQuery(self):
-        """Return the valid list of hashes in the database"""
-        pass
-
-    def updatePubKeys(self, keys: Iterable[PublicKey], sync: bool = False):
-        """Will update the list of publicKeys in the database.
-
-        If the sync flag is set the function will erase all the publickeys in the database and replace with the new set.
+        Will append by default
 
         """
-        pass
-
-    def delete_pub_keys(self, keys: Iterable[PublicKey]):
-        """Delete all public keys that match those in the list `keys`"""
-
-        pass
-
-    def updateIPs(self, ips: Iterable[IPv4Address], overwrite: bool = False):
-        """Update all the ip addresses"""
-        pass
-
-    def updateEvents(
-        self, pairs: Iterable[tuple[bytes, bytes]], overwrite: bool = False
-    ):
         pass
 
 
