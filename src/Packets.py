@@ -92,6 +92,14 @@ class PacketBase(ABC):
         pass
 
 
+class PacketPeerInfo(PacketBase):
+    """Provide peer information.
+
+    This should always be the first packet sent over an
+    `EncryptedConnection`, and provides information about the
+    """
+
+
 class PacketGetEvents(PacketBase):
     """Request for events since a particular time.
 
@@ -155,7 +163,7 @@ def packet_test() -> None:
             lambda k: True,
         )
         while True:
-            connection = listener.accept()
+            connection, (_addr, _port) = listener.accept()
             send_pkt = Packet(PacketGetEventsResp(
                 [
                     Event(EventJoin('Alex')),

@@ -228,16 +228,17 @@ class EncryptedListener:
         """Exits a `with` block."""
         self._sock.close()
 
-    def accept(self) -> EncryptedStream:
+    def accept(self) -> Tuple[EncryptedStream, Tuple[str, int]]:
         """Waits for the next EncryptedStream connection.
 
         Waits for the next valid, encrypted connection to the listener
-        socket, and returns it as an encrypted stream.
+        socket, and returns it as an encrypted stream. Also returns
+        the address and port of the remote host.
 
         """
         while True:
             try:
-                sock, _ret_addr = self._sock.accept()
+                sock, (addr, port) = self._sock.accept()
                 buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
                 # BUG: These are blocking operations, which will lock
@@ -250,7 +251,7 @@ class EncryptedListener:
                     self._private_key,
                     self._key_checker
                 )
-                return EncryptedStream(buf, s2c, c2s)
+                return EncryptedStream(buf, s2c, c2s), (addr, port)
 
             except Exception as e:
                 print('Warning: rejected incoming connection: ' + str(e))
@@ -362,12 +363,16 @@ def basic_test() -> None:
                 lambda k: True,
         ) as listener:
             while True:
-                with listener.accept() as connection:
-                    # Test buffering
-                    connection.write(b'Hello ')
-                    connection.flush()
-                    time.sleep(1)
-                    connection.write(b'World!')
+                # with listener.accept() as connection:
+                connection, (addr, port) = listener.accept()
+
+                # Test buffering
+                connection.write(b'Hello ')
+                connection.flush()
+                time.sleep(1)
+                connection.write(b'World!')
+
+                connection.close()
 
     elif command == 'connect':
         with EncryptedStream.connect(
