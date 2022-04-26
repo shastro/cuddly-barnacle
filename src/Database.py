@@ -27,6 +27,8 @@ import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
 from ipaddress import IPv4Address
+from os import PathLike
+from pathlib import PurePath
 from sqlite3.dbapi2 import Date
 from typing import (
     Any,
@@ -42,9 +44,11 @@ from typing import (
 )
 
 from EncryptedStream import PrivateKey, PublicKey
+from Environment import Env
 from _hashlib import HASH
 
 
+env = Env()
 # Generic Type Var
 T = TypeVar("T")
 DateTime = datetime.datetime
@@ -77,12 +81,12 @@ class WriteType(Enum):
     APPEND = auto()
 
 
-class Query(ABC):
+class DatabaseSelector(ABC):
     def get_data(self) -> List[T]:  # type: ignore
         pass
 
 
-class HashQuery(Query):
+class HashSelector(DatabaseSelector):
     """Class representing a query to the database looking for matches on other properties that match the list of hashes."""
 
     def __init__(
@@ -99,7 +103,7 @@ class HashQuery(Query):
     #     return (self._time_start, self._time_end)
 
 
-class IPQuery(Query):
+class IPSelector(DatabaseSelector):
     def __init__(
         self, ipaddrs: List[IPv4Address], start: DateTime = None, end: DateTime = None
     ):
@@ -111,7 +115,7 @@ class IPQuery(Query):
         return self._ips
 
 
-class EventQuery(Query):
+class EventSelector(DatabaseSelector):
     def __init__(
         self, eventblobs: List[bytearray], start: DateTime = None, end: DateTime = None
     ):
@@ -123,7 +127,7 @@ class EventQuery(Query):
         return self._eventblobs
 
 
-class PubKeyQuery(Query):
+class PubKeySelector(DatabaseSelector):
     def __init__(
         self, keys: List[PublicKey], start: DateTime = None, end: DateTime = None
     ):
@@ -136,7 +140,7 @@ class PubKeyQuery(Query):
 
 
 # DecoratorClass
-class TimeQuery(Query):
+class TimeSelector(DatabaseSelector):
     """TimeQuery is a decorator class over a normal query.
 
     It can be used to filter the data written to or returned from the database
@@ -144,7 +148,7 @@ class TimeQuery(Query):
 
     """
 
-    def __init__(self, cls: Query, start: DateTime, end: DateTime):
+    def __init__(self, cls: DatabaseSelector, start: DateTime, end: DateTime):
         self._cls = cls
         self._start = start
         self._end = end
@@ -162,10 +166,19 @@ class TimeQuery(Query):
 class DatabaseItem(ABC):
     """Abstract Base Class for database items"""
 
+    @staticmethod
     def serialize():
         pass
 
     def deserialize():
+        pass
+
+
+class PubKeyItem(DatabaseItem):
+    """PublicKeyItem, represents a row in the database"""
+
+    @staticmethod
+    def serialize():
         pass
 
 
@@ -177,15 +190,15 @@ class SQLiteDB:
 
     """
 
-    def __init__(self) -> None:
+    def __init__(self, dbpath: PurePath = None) -> None:
         """Instantiate and set filename"""
-        self.fname = None
+        self.fname = dbpath
         self.connection = None
         self.cursor = None
         self.changed = False
         self.committed = False
 
-    def createEmpty(self, ifname: str, force: bool = False):
+    def createEmpty(self, ifname: PurePath = None, force: bool = False):
         """Create an empty database with our specified format.
 
         Will not by default overwrite an existing database unless the `force`
@@ -194,17 +207,20 @@ class SQLiteDB:
 
         """
 
-        if self.connection is not None:
-            raise ConnectionAlreadyExists(self.fname)
-
+        if not self.fname:
+            self.fname = ifname
         self.fname = ifname
-        self.connection = sqlite3.connect(self.fname)
+
+        if self.connection is not None:
+            raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
+
+        self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
 
     def connect(self):
         """Connect to the database for operations. Will also create a new database"""
         if self.connection is not None:
-            raise ConnectionAlreadyExists(self.fname)
+            raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
 
     def commit(self):
         """Commit changes to the database."""
@@ -215,13 +231,13 @@ class SQLiteDB:
         """Close the database connection."""
 
         if self.connection is None:
-            raise ConnectionAlreadyClosed(self.fname)
+            raise ConnectionAlreadyClosed(self.fname.as_posix())  # type: ignore
 
         if self.changed and self.committed is False:
             logging.warning("Closed connection without committing changes")
         self.connection.close()
 
-    def query(self, query: Query):
+    def query(self, query: DatabaseSelector):
         """Return the requested information based on a query type, which may be decorated.
 
         Returns a databaseItem, representing a row in the database
@@ -232,7 +248,7 @@ class SQLiteDB:
 
             # raise InvalidQuery("Invalid Query Type in Function eventQuery")
 
-    def write(self, keys: Query, write_type: WriteType = WriteType.APPEND):
+    def write(self, keys: DatabaseSelector, write_type: WriteType = WriteType.APPEND):
         """Will write to the list of publicKeys in the database.
 
         Will append by default
@@ -277,7 +293,7 @@ def main():
 
     db = SQLiteDB()
 
-    db.createEmpty("test.db")
+    db.createEmpty(env.get_database_path())
 
 
 if __name__ == "__main__":
