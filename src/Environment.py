@@ -20,22 +20,33 @@ class Env:
 
     def __init__(self):
         homedir = os.getenv("HOME")
+        self.subdir = ".chatchat"
         if homedir:
-            self.root = homedir
-            self.database = PurePath(homedir, "database", "client.db")
+            self._root = homedir
+            self._application_root = PurePath(homedir, self.subdir)
+            self._dbfolder = PurePath(self._application_root, "database")
+            self._database = PurePath(self._dbfolder, "client.db")
+
+        if not os.path.exists(self._application_root):
+            os.mkdir(self._application_root)
+
+        if not os.path.exists(self._dbfolder):
+            os.mkdir(self._dbfolder)
 
     def get_root_path(self):
-        return self.root
+        return self._root
 
     def get_database_path(self):
-        return self.database
+        return self._database
+
+    def get_application_root(self):
+        return self._application_root
 
 
 def tests():
     env = Env()
-    env2 = Env()
     print(env.get_root_path())
-    print(env2.get_root_path())
+    print(env.get_application_root())
     print(env.get_database_path())
 
 
