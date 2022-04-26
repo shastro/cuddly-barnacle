@@ -134,9 +134,10 @@ class SpokeState(NodeState):
     def run(self) -> NodeState:
         print('Entering spoke state')
 
-        # TODO: Implement this. This is just here to make the type
-        # checker shut up.
-        return cast(NodeState, None)
+        # Wait around for an incoming connection, and set it as our
+        # predecessor.
+        pred, _addr = self._info.listener.accept()
+        return StableState(self._info, pred, self._entry_point)
 
 
 class SolitaryState(NodeState):
