@@ -256,7 +256,7 @@ class EncryptedListener:
         """
         while True:
             try:
-                sock, addr = self._sock.accept()
+                sock, source_addr = self._sock.accept()
                 buf = cast(BufferedRWPair, sock.makefile('rwb'))
 
                 # BUG: These are blocking operations, which will lock
@@ -264,12 +264,17 @@ class EncryptedListener:
                 # doesn't send any data.
                 magic_number_check(buf)
 
-                addr, c2s, s2c = key_exchange(
+                return_addr, c2s, s2c = key_exchange(
                     buf,
                     self._private_key,
                     self._addr,
                     self._key_checker
                 )
+
+                # If we want to connect to the remote node, we'll use
+                # the physical source_addr, but a different port.
+                addr = (source_addr[0], return_addr[1])
+
                 return (EncryptedStream(buf, s2c, c2s), addr)
 
             except Exception as e:

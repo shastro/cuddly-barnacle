@@ -164,7 +164,7 @@ class SolitaryState(NodeState):
         print('Entering solitary state')
 
         pred, pred_addr = self._info.listener.accept()
-        print(f'Got new connection to {pred_addr}, trying to connect back')
+        print(f'Got new connection from {pred_addr}, trying to connect back')
         succ = EncryptedStream.connect(
             self._info.local_addr,
             pred_addr,
