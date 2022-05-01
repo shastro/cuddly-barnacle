@@ -64,9 +64,12 @@ class StableState(NodeState):
         print('Entering stable state')
 
         readable, writable, exception = select.select(
-            [self._pred, self._info.listener._sock],  # read
-            [],                                       # write
-            [],                                       # except
+            [                   # read
+                self._pred,
+                self._info.listener._sock,
+            ],
+            [],                 # write
+            [],                 # except
         )
 
         if self._pred in readable:
@@ -81,6 +84,7 @@ class StableState(NodeState):
         return self
 
     def interpret_packet(self, packet: Packet):
+        # TODO: implement this.
         pass
 
 
@@ -110,9 +114,46 @@ class HubState(NodeState):
     def run(self) -> NodeState:
         print('Entering hub state')
 
-        # TODO: Implement this. This is just here to make the type
-        # checker shut up.
-        return cast(NodeState, None)
+        # We send our predecessor node the extra node's address, then
+        # we begin accepting data from both the extra node and the
+        # predecessor; theoretically, the predecessor should stop
+        # sending us data as soon as it receives the extra node's
+        # address, but we can't guarantee when exactly that will
+        # happen. We stay in this state until the predecessor
+        # disconnects from us, at which point we set the extra node as
+        # our predecessor and proceed to the stable state.
+
+        # TODO: send the packet.
+
+        # No wait, we can't send the packet here. If we were to send
+        # the packet here, then every time the state gets refreshed,
+        # we'd send a new routing packet.
+
+        readable, writable, exception = select.select(
+            [                   # read
+                self._pred,
+                self._extra,
+            ],
+            [],                 # write
+            [],                 # accept
+        )
+
+        if self._pred in readable:
+            # Message received
+            packet = Packet.deserialize(cast(BufferedReader, self._pred))
+            self.interpret_packet(packet)
+        elif self._extra in readable:
+            # Message received
+            packet = Packet.deserialize(cast(BufferedReader, self._pred))
+            self.interpret_packet(packet)
+
+        # We just received a normal message; don't transition to
+        # another state.
+        return self
+
+    def interpret_packet(self, packet: Packet):
+        # TODO: implement this
+        pass
 
 
 class SpokeState(NodeState):

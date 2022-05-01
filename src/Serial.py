@@ -11,7 +11,7 @@ class Deserialize:
 
     @staticmethod
     def bytes(stream: BufferedReader) -> bytearray:
-        return bytearray(stream.read(Deserialize.long(stream)))
+        return Deserialize._checked_read(stream, Deserialize.long(stream))
 
     @staticmethod
     def str(stream: BufferedReader) -> str:
@@ -19,11 +19,11 @@ class Deserialize:
 
     @staticmethod
     def long(stream: BufferedReader) -> int:
-        return int.from_bytes(stream.read(8), 'big')
+        return int.from_bytes(Deserialize._checked_read(stream, 8), 'big')
 
     @staticmethod
     def byte(stream: BufferedReader) -> int:
-        return int.from_bytes(stream.read(1), 'big')
+        return int.from_bytes(Deserialize._checked_read(stream, 1), 'big')
 
     @staticmethod
     def list(
@@ -36,6 +36,14 @@ class Deserialize:
             items.append(deserializer(stream))
 
         return items
+
+    @staticmethod
+    def _checked_read(stream: BufferedReader, length: int) -> bytearray:
+        data = stream.read(length)
+        if len(data) < length:
+            raise ConnectionClosed()
+
+        return bytearray(data)
 
 
 class Serialize:
@@ -67,3 +75,7 @@ class Serialize:
         Serialize.long(stream, len(value))
         for item in value:
             serializer(stream, item)
+
+
+class ConnectionClosed(Exception):
+    """Raised when a connection closes when we're reading data."""
