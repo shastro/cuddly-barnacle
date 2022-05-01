@@ -43,6 +43,8 @@ class Env:
         if not os.path.exists(self._dbfolder):
             os.mkdir(self._dbfolder)
 
+        self._config = Config.load_or_generate(self._configfile)
+
     def get_root_path(self):
         return self._root
 
@@ -51,6 +53,9 @@ class Env:
 
     def get_application_root(self):
         return self._application_root
+
+    def get_config(self):
+        return self._config
 
 
 class Config:
@@ -122,6 +127,7 @@ def tests():
     print(env.get_root_path())
     print(env.get_application_root())
     print(env.get_database_path())
+    print(env.get_config().networking.local_addr)
 
 
 if __name__ == "__main__":
