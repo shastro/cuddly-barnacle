@@ -56,7 +56,7 @@ from typing import (
 )
 
 # Ours
-from EncryptedStream import PrivateKey, PublicKey, PeerAddress
+from EncryptedStream import PrivateKey, PublicKey, PeerAddress, Encoding, PublicFormat
 from Environment import Env
 
 
@@ -183,8 +183,9 @@ class PeerSelector(DatabaseSelector):
     def __init__(self, peers: List[PeerAddress]):
         """Create a new PeerSelector
 
-        :param peers: List of peers to match against. Passing None will query for ALL peers. Passing an empty array will return nothing.
-        :returns: None
+        :param peers: List of peers to match against. Passing None will query
+        for ALL peers. Passing an empty array will return nothing. :returns:
+        None
 
         """
         self._peers = peers
@@ -546,6 +547,52 @@ class TestSelectors(unittest.TestCase):
         sel = PeerSelector(a)
         self.assertEqual(
             "SELECT * FROM peers WHERE (addr = '192.168.13.13' AND port = 6969) OR (addr = '192.168.14.12' AND port = 6000) OR (addr = '69.69.69.69' AND port = 6969);",
+            sel.get_query().get_str(),
+        )
+
+    def test_key_selector(self):
+
+        # Test None
+        sel = PubKeySelector(None)
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM keys;", q.get_str())
+
+        # Test Empty
+        sel = PubKeySelector([])
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM keys WHERE publickey IN ();", q.get_str())
+
+        # Test Single
+        key = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+
+        a = [key]
+        sel = PubKeySelector(a)  # type: ignore
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN ('{key}');",
+            sel.get_query().get_str(),
+        )
+
+        # Test Multiple
+        key2 = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+        key3 = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+        a.append(key2)
+        a.append(key3)
+
+        sel = PubKeySelector(a)  # type: ignore
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN ('{key}','{key2}','{key3}');",
             sel.get_query().get_str(),
         )
 
