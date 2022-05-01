@@ -7,7 +7,7 @@ state of the network.
 """
 
 from abc import ABC, abstractmethod
-from io import BufferedReader
+from io import BufferedReader, BufferedWriter
 from typing import List, cast
 import random
 import select
@@ -20,7 +20,8 @@ from EncryptedStream import (
     PrivateKey,
     PeerAddress,
 )
-from Packets import Packet
+from Packets import Packet, PacketReroute
+from Serial import ConnectionClosed
 
 
 class NodeState(ABC):
@@ -79,6 +80,11 @@ class StableState(NodeState):
         if self._info.listener._sock in readable:
             # Connection received
             conn, addr = self._info.listener.accept()
+
+            # Tell the predecessor that we got a new connection.
+            PacketReroute(addr).serialize(cast(BufferedWriter, self._pred))
+
+            # Proceed to the hub state.
             return HubState(self._info, self._pred, self._succ, conn, addr)
 
         return self
@@ -114,7 +120,7 @@ class HubState(NodeState):
     def run(self) -> NodeState:
         print('Entering hub state')
 
-        # We send our predecessor node the extra node's address, then
+        # We sent our predecessor node the extra node's address, then
         # we begin accepting data from both the extra node and the
         # predecessor; theoretically, the predecessor should stop
         # sending us data as soon as it receives the extra node's
@@ -122,12 +128,6 @@ class HubState(NodeState):
         # happen. We stay in this state until the predecessor
         # disconnects from us, at which point we set the extra node as
         # our predecessor and proceed to the stable state.
-
-        # TODO: send the packet.
-
-        # No wait, we can't send the packet here. If we were to send
-        # the packet here, then every time the state gets refreshed,
-        # we'd send a new routing packet.
 
         readable, writable, exception = select.select(
             [                   # read
@@ -140,7 +140,13 @@ class HubState(NodeState):
 
         if self._pred in readable:
             # Message received
-            packet = Packet.deserialize(cast(BufferedReader, self._pred))
+            try:
+                packet = Packet.deserialize(cast(BufferedReader, self._pred))
+            except ConnectionClosed:
+                # Predecessor closed the connection; this is normal,
+                # so ignore the exception and transition to stable
+                # state.
+                return StableState(self._info, self._extra, self._succ)
             self.interpret_packet(packet)
         elif self._extra in readable:
             # Message received
