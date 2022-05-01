@@ -6,7 +6,7 @@ from pathlib import PurePath
 
 
 class Env:
-    """Singleton class to capture global program state.
+    """Singleton class to capture global program environment.
 
     Stores information related to the environment the application runs
     in.
