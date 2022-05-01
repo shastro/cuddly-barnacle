@@ -1,10 +1,15 @@
 """External API for controlling the node."""
 
-from flask import Flask, request
+from flask import Flask, request, render_template, url_for
 import json
 
 api = Flask(__name__)
 
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    # body = request.values.get('Body', None)
+    # text = request.form['From']
+    return render_template('index.html')
 
 @api.route('/messages', methods=['GET'])
 def messages():
