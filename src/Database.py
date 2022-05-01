@@ -8,13 +8,16 @@ This system is interfaced with the synchronization system as well as the fronten
 The structure of the database is as follows
 
 Accepted IP table
-- IPv4 addr - Last seen timestamp - trust flag
+- IP addr - port to try - Last seen timestamp - trust flag
+- addr: TEXT - port: INTEGER - timestamp: REAL - trust: INTEGER
 
 Accepted PubKey Table
 - PubKey - Last seen timestamp - trust flag
+- publickey: TEXT - timestamp: REAL - trust: INTEGER
 
 Event Table
 - recv timestamp - event hash - event blob
+- timestamp: REAL - hash: TEXT - event: BLOB
 
 We store trust flags since we might want to know who is banned or not.
 
@@ -81,62 +84,109 @@ class WriteType(Enum):
     APPEND = auto()
 
 
+class SQLQuery:
+
+    """Class representing an SQL Query. Used by selector classes to get valid SQL queries from the objects passed."""
+
+    def __init__(self, table: str):
+        """Create a new SQLQuery object
+
+        :param table: name of table in database to query
+        :returns: None
+
+        """
+        self._where_cases: List[str] = []
+        self._table_name: str = table
+
+    def where(self, condition: str):
+        """Modify self to include a new where case to the list of where conditions
+
+        :param condition: str representing a single WHERE condition
+        :returns: self
+
+        """
+        self._where_cases.append(condition)
+        return self
+
+    def get_str(self):
+        """Convert object into a valid SQLQuery string
+
+        :returns: string representation of Query
+
+        """
+        base: str = f"SELECT * FROM {self._table_name}"
+        if len(self._where_cases) != 0:
+            base += " WHERE"
+
+            for c in self._where_cases[:-1]:
+                base += f" {c} AND"
+
+            base += f" {self._where_cases[-1]}"
+
+        return base
+
+
 class DatabaseSelector(ABC):
-    def get_data(self) -> List[T]:  # type: ignore
+    """Abstract Base Class for Database Selectors"""
+
+    def get_query(self) -> SQLQuery:  # type: ignore
+        """Function to return the SQLQuery object representing the selection choice(s)"""
         pass
 
 
 class HashSelector(DatabaseSelector):
-    """Class representing a query to the database looking for matches on other properties that match the list of hashes."""
+    """Class representing a query to the database looking for matches on other properties that match the list of hashes.
 
-    def __init__(
-        self, hashes: List[HASH], start: DateTime = None, end: DateTime = None
-    ):
+    Useful for selecting the list of blobs that match the given list of hashes.
+    """
+
+    def __init__(self, hashes: List[HASH]):
         self._hashes = hashes
-        self._time_start = start
-        self._time_end = end
+        self._query = SQLQuery("events")
 
-    def get_data(self):
-        return self._hashes
+    def get_query(self):
+        """Get the query associated with HashSelector
 
-    # def get_time_range(self):
-    #     return (self._time_start, self._time_end)
+        :returns: SQLQuery object
+
+        """
+        base = "hash IN ("
+        for h in self._hashes[:-1]:
+            base += f"'{h.hexdigest()}',"
+
+        base += f"'{self._hashes[-1].hexdigest()}');"
+        self._query.where(base)
+        return self._query
 
 
 class IPSelector(DatabaseSelector):
-    def __init__(
-        self, ipaddrs: List[IPv4Address], start: DateTime = None, end: DateTime = None
-    ):
+    def __init__(self, ipaddrs: List[IPv4Address]):
         self._ips = ipaddrs
-        self._time_start = start
-        self._time_end = end
 
     def get_data(self):
         return self._ips
 
 
 class EventSelector(DatabaseSelector):
-    def __init__(
-        self, eventblobs: List[bytearray], start: DateTime = None, end: DateTime = None
-    ):
+    def __init__(self, eventblobs: List[bytearray]):
         self._eventblobs = eventblobs
-        self._time_start = start
-        self._time_end = end
 
     def get_data(self):
         return self._eventblobs
 
 
 class PubKeySelector(DatabaseSelector):
-    def __init__(
-        self, keys: List[PublicKey], start: DateTime = None, end: DateTime = None
-    ):
+    def __init__(self, keys: List[PublicKey]):
         self._keys = keys
-        self._time_start = start
-        self._time_end = end
 
     def get_data(self):
         return self._keys
+
+
+# DecoratorClass
+class MatchSelector(DatabaseSelector):
+
+    pass
 
 
 # DecoratorClass
@@ -150,15 +200,22 @@ class TimeSelector(DatabaseSelector):
 
     def __init__(self, cls: DatabaseSelector, start: DateTime, end: DateTime):
         self._cls = cls
+        self._property = "timestamp"
         self._start = start
         self._end = end
 
-    def get_data(self):
-        return (self._cls.get_data(), self._start, self._end)
+    def get_query(self):
+        tstart = self._start.timestamp()
+        tend = self._end.timestamp()
+
+        return (
+            self._cls.get_query()
+            .where(f"timestamp >= {tstart}")
+            .where(f"timestamp <= {tend}")
+        )
 
 
 # Database API Ideas
-# db.write(PubKeySelector([key1, key2, key3]), WriteType.APPEND)
 # db.query(TimeFilter(PubKeySelector(None))) Returns everything every PubKeyItem
 # db.query(TimeFilter(PubKeySelector([]))) Returns no items
 
@@ -166,19 +223,48 @@ class TimeSelector(DatabaseSelector):
 class DatabaseItem(ABC):
     """Abstract Base Class for database items"""
 
-    @staticmethod
     def serialize():
         pass
 
+    @staticmethod
+    def deserialize():
+        pass
+
+
+class EventItem(DatabaseItem):
+    """EventItem, represents a row in the event table"""
+
+    def __init__(self, blob: bytearray, hash: HASH, timestamp: DateTime):
+        self._blob = blob
+        self._hash = hash
+        self._timestamp = timestamp
+
+    def serialize():
+        pass
+
+    def deserialize():
+        return
+
+
+class IpItem(DatabaseItem):
+    """IpItem, represents a row in the accepted IP table"""
+
+    def serialize():
+        pass
+
+    @staticmethod
     def deserialize():
         pass
 
 
 class PubKeyItem(DatabaseItem):
-    """PublicKeyItem, represents a row in the database"""
+    """PublicKeyItem, represents a row in the pubkey table"""
+
+    def serialize():
+        pass
 
     @staticmethod
-    def serialize():
+    def deserialize():
         pass
 
 
@@ -237,18 +323,19 @@ class SQLiteDB:
             logging.warning("Closed connection without committing changes")
         self.connection.close()
 
-    def query(self, query: DatabaseSelector):
+    def query(self, select: DatabaseSelector):
         """Return the requested information based on a query type, which may be decorated.
 
         Returns a databaseItem, representing a row in the database
         """
-        match query:
-            case HashQuery:
-                print("You have a HashQuery")
+        tfilter = None
+        if type(select) == TimeSelector:
+            qdata, start, end = select.get_data()
 
+            self.cursor.execute("select * from pubkey where")
             # raise InvalidQuery("Invalid Query Type in Function eventQuery")
 
-    def write(self, keys: DatabaseSelector, write_type: WriteType = WriteType.APPEND):
+    def write(self, keys: DatabaseItem, write_type: WriteType = WriteType.APPEND):
         """Will write to the list of publicKeys in the database.
 
         Will append by default
@@ -288,12 +375,70 @@ class ConnectionAlreadyClosed(DatabaseException):
         super().__init__(self.message)
 
 
+###########
+# TESTING #
+###########
+class TestSQLQuery(unittest.TestCase):
+    def test_nowhere(self):
+        query = SQLQuery("ipaddrs")
+        self.assertEqual(
+            "SELECT * FROM ipaddrs",
+            query.get_str(),
+        )
+
+    def test_one_where(self):
+        query = SQLQuery("ipaddrs").where("timestamp >= 123")
+        self.assertEqual(
+            "SELECT * FROM ipaddrs WHERE timestamp >= 123",
+            query.get_str(),
+        )
+
+    def test_multiple_where(self):
+        query = (
+            SQLQuery("ipaddrs")
+            .where("timestamp >= 123")
+            .where("timestamp <= 234")
+            .where("hi = TEST")
+        )
+        self.assertEqual(
+            "SELECT * FROM ipaddrs WHERE timestamp >= 123 AND timestamp <= 234 AND hi = TEST",
+            query.get_str(),
+        )
+
+
+class TestSelectors(unittest.TestCase):
+    def test_hash_selector(self):
+
+        # Test Single
+        a, b, c = hashlib.sha256(), hashlib.sha256(), hashlib.sha256()
+        a.update(b"test1")
+        adigest = a.hexdigest()
+
+        sel = HashSelector([a])
+        q = sel.get_query()
+        self.assertEqual(
+            f"SELECT * FROM events WHERE hash IN ('{adigest}');",
+            q.get_str(),
+        )
+        # Test Multiple
+        b.update(b"test2")
+        c.update(b"test3")
+
+        sel = HashSelector([a, b, c])
+        q = sel.get_query()
+        bdigest = b.hexdigest()
+        cdigest = c.hexdigest()
+        self.maxDiff = None
+
+        self.assertEqual(
+            f"SELECT * FROM events WHERE hash IN ('{adigest}','{bdigest}','{cdigest}');",
+            q.get_str(),
+        )
+
+
 def main():
     """Entry Point for testing"""
-
-    db = SQLiteDB()
-
-    db.createEmpty(env.get_database_path())
+    unittest.main()
 
 
 if __name__ == "__main__":
