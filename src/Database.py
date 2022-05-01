@@ -8,14 +8,19 @@ This system is interfaced with the synchronization system as well as the fronten
 The structure of the database is as follows
 
 Accepted IP table
+Table Name: peers
+Description of Items
 - IP addr - port to try - Last seen timestamp - trust flag
+True Names and Types
 - addr: TEXT - port: INTEGER - timestamp: REAL - trust: INTEGER
 
 Accepted PubKey Table
+Table Name: keys
 - PubKey - Last seen timestamp - trust flag
 - publickey: TEXT - timestamp: REAL - trust: INTEGER
 
 Event Table
+Table Name: events
 - recv timestamp - event hash - event blob
 - timestamp: REAL - hash: TEXT - event: BLOB
 
@@ -29,10 +34,10 @@ import sqlite3
 import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
-from ipaddress import IPv4Address
 from os import PathLike
 from pathlib import PurePath
 from sqlite3.dbapi2 import Date
+from _hashlib import HASH
 from typing import (
     Any,
     Callable,
@@ -46,9 +51,9 @@ from typing import (
     Union,
 )
 
-from EncryptedStream import PrivateKey, PublicKey
+# Ours
+from EncryptedStream import PrivateKey, PublicKey, PeerAddress
 from Environment import Env
-from _hashlib import HASH
 
 
 env = Env()
@@ -123,12 +128,15 @@ class SQLQuery:
 
             base += f" {self._where_cases[-1]}"
 
+        base += ";"
+
         return base
 
 
 class DatabaseSelector(ABC):
     """Abstract Base Class for Database Selectors"""
 
+    @abstractmethod
     def get_query(self) -> SQLQuery:  # type: ignore
         """Function to return the SQLQuery object representing the selection choice(s)"""
         pass
@@ -154,24 +162,40 @@ class HashSelector(DatabaseSelector):
         for h in self._hashes[:-1]:
             base += f"'{h.hexdigest()}',"
 
-        base += f"'{self._hashes[-1].hexdigest()}');"
+        base += f"'{self._hashes[-1].hexdigest()}')"
         self._query.where(base)
         return self._query
 
 
-class IPSelector(DatabaseSelector):
-    def __init__(self, ipaddrs: List[IPv4Address]):
-        self._ips = ipaddrs
+class PeerSelector(DatabaseSelector):
+    """Class that will produce selections on the peers"""
 
-    def get_data(self):
-        return self._ips
+    def __init__(self, peers: List[PeerAddress]):
+        self._peers = peers
+        self._query = SQLQuery("peers")
+
+    def get_query(self):
+        """Get the query associated with PeerSelector
+
+        :returns: SQLQuery object
+
+        """
+        addrclause = ""
+        for p in self._peers[:-1]:
+            addrclause += f"(addr = '{p[0]}' AND port = {p[1]}) OR "
+
+        p = self._peers[-1]
+        addrclause += f"(addr = '{p[0]}' AND port = {p[1]})"
+        self._query.where(addrclause)
+
+        return self._query
 
 
 class EventSelector(DatabaseSelector):
     def __init__(self, eventblobs: List[bytearray]):
         self._eventblobs = eventblobs
 
-    def get_data(self):
+    def get_query(self):
         return self._eventblobs
 
 
@@ -179,14 +203,8 @@ class PubKeySelector(DatabaseSelector):
     def __init__(self, keys: List[PublicKey]):
         self._keys = keys
 
-    def get_data(self):
+    def get_query(self):
         return self._keys
-
-
-# DecoratorClass
-class MatchSelector(DatabaseSelector):
-
-    pass
 
 
 # DecoratorClass
@@ -382,14 +400,14 @@ class TestSQLQuery(unittest.TestCase):
     def test_nowhere(self):
         query = SQLQuery("ipaddrs")
         self.assertEqual(
-            "SELECT * FROM ipaddrs",
+            "SELECT * FROM ipaddrs;",
             query.get_str(),
         )
 
     def test_one_where(self):
         query = SQLQuery("ipaddrs").where("timestamp >= 123")
         self.assertEqual(
-            "SELECT * FROM ipaddrs WHERE timestamp >= 123",
+            "SELECT * FROM ipaddrs WHERE timestamp >= 123;",
             query.get_str(),
         )
 
@@ -401,7 +419,7 @@ class TestSQLQuery(unittest.TestCase):
             .where("hi = TEST")
         )
         self.assertEqual(
-            "SELECT * FROM ipaddrs WHERE timestamp >= 123 AND timestamp <= 234 AND hi = TEST",
+            "SELECT * FROM ipaddrs WHERE timestamp >= 123 AND timestamp <= 234 AND hi = TEST;",
             query.get_str(),
         )
 
@@ -433,6 +451,25 @@ class TestSelectors(unittest.TestCase):
         self.assertEqual(
             f"SELECT * FROM events WHERE hash IN ('{adigest}','{bdigest}','{cdigest}');",
             q.get_str(),
+        )
+
+    def test_peer_selector(self):
+        # Test Single
+        a = [("192.168.13.13", 6969)]
+        sel = PeerSelector(a)
+        self.assertEqual(
+            "SELECT * FROM peers WHERE (addr = '192.168.13.13' AND port = 6969);",
+            sel.get_query().get_str(),
+        )
+
+        # Test Multiple
+
+        a.append(("192.168.14.12", 6000))  # type: ignore
+        a.append(("69.69.69.69", 6969))  # type: ignore
+        sel = PeerSelector(a)
+        self.assertEqual(
+            "SELECT * FROM peers WHERE (addr = '192.168.13.13' AND port = 6969) OR (addr = '192.168.14.12' AND port = 6000) OR (addr = '69.69.69.69' AND port = 6969);",
+            sel.get_query().get_str(),
         )
 
 
