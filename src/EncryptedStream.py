@@ -28,7 +28,7 @@ from cryptography.hazmat.primitives.ciphers import (
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import (
     Encoding as _Encoding,
-    PublicFormat,
+    PublicFormat as _PublicFormat,
 )
 
 from Serial import Serialize, Deserialize
@@ -38,6 +38,7 @@ from Serial import Serialize, Deserialize
 PrivateKey = _PrivateKey
 PublicKey = _PublicKey
 Encoding = _Encoding
+PublicFormat = _PublicFormat
 
 
 # Maximum number of simultaneous connections to allow in the backlog,
