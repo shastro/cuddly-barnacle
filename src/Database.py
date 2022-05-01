@@ -1,6 +1,7 @@
 """SQLite Database Interface abstraction over sqlite3
 
-This file implements the database interface for the application data on the system. Typically stored under ~/.chatchat/database [Defined in Environment.py]
+This file implements the database interface for the application data on the
+system. Typically stored under ~/.chatchat/database [Defined in Environment.py]
 
 This system is interfaced with the synchronization system as well as the frontend.
 
@@ -8,6 +9,7 @@ This system is interfaced with the synchronization system as well as the fronten
 The structure of the database is as follows
 
 Accepted IP table
+-----------------
 Table Name: peers
 Description of Items
 - IP addr - port to try - Last seen timestamp - trust flag
@@ -15,11 +17,13 @@ True Names and Types
 - addr: TEXT - port: INTEGER - timestamp: REAL - trust: INTEGER
 
 Accepted PubKey Table
+-----------------
 Table Name: keys
 - PubKey - Last seen timestamp - trust flag
 - publickey: TEXT - timestamp: REAL - trust: INTEGER
 
 Event Table
+-----------------
 Table Name: events
 - recv timestamp - event hash - event blob
 - timestamp: REAL - hash: TEXT - event: BLOB
@@ -158,6 +162,12 @@ class HashSelector(DatabaseSelector):
         :returns: SQLQuery object
 
         """
+        if self._hashes == None:
+            return self._query
+
+        if len(self._hashes) == 0:
+            return self._query.where("hash IN ()")
+
         base = "hash IN ("
         for h in self._hashes[:-1]:
             base += f"'{h.hexdigest()}',"
@@ -171,6 +181,12 @@ class PeerSelector(DatabaseSelector):
     """Class that will produce selections on the peers"""
 
     def __init__(self, peers: List[PeerAddress]):
+        """Create a new PeerSelector
+
+        :param peers: List of peers to match against. Passing None will query for ALL peers. Passing an empty array will return nothing.
+        :returns: None
+
+        """
         self._peers = peers
         self._query = SQLQuery("peers")
 
@@ -180,6 +196,12 @@ class PeerSelector(DatabaseSelector):
         :returns: SQLQuery object
 
         """
+        if self._peers == None:
+            return self._query
+
+        if len(self._peers) == 0:
+            return self._query.where("peer IN ()")
+
         addrclause = ""
         for p in self._peers[:-1]:
             addrclause += f"(addr = '{p[0]}' AND port = {p[1]}) OR "
@@ -191,20 +213,36 @@ class PeerSelector(DatabaseSelector):
         return self._query
 
 
-class EventSelector(DatabaseSelector):
-    def __init__(self, eventblobs: List[bytearray]):
-        self._eventblobs = eventblobs
-
-    def get_query(self):
-        return self._eventblobs
-
-
 class PubKeySelector(DatabaseSelector):
     def __init__(self, keys: List[PublicKey]):
+        """Create a new PublicKeySelector
+
+        This will match against publickeys in the provided list. Providing
+        `None` will select all available publickeys. To get only the trusted
+        keys please used a `TrustSelector` decorator.
+
+        :param keys: List of publickeys to match against
+        :returns:
+
+        """
         self._keys = keys
+        self._query = SQLQuery("keys")
 
     def get_query(self):
-        return self._keys
+
+        if self._keys == None:
+            return self._query
+
+        if len(self._keys) == 0:
+            return self._query.where("publickey IN ()")
+
+        base = "publickey IN ("
+        for h in self._keys[:-1]:
+            base += f"'{h}',"
+        base += f"'{self._keys[-1]}')"
+
+        self._query.where(base)
+        return self._query
 
 
 # DecoratorClass
@@ -231,6 +269,24 @@ class TimeSelector(DatabaseSelector):
             .where(f"timestamp >= {tstart}")
             .where(f"timestamp <= {tend}")
         )
+
+
+# DecoratorClass
+class TrustSelector(DatabaseSelector):
+    """TrustSelector is a decorator class over a normal query.
+
+    It can be used to filter the data written to or returned from the database
+    to select across the trusted property.
+
+    """
+
+    def __init__(self, cls: DatabaseSelector, trust: bool):
+        self._cls = cls
+        self._property = "timestamp"
+        self._trust = int(trust)
+
+    def get_query(self):
+        return self._cls.get_query().where(f"trust = {self._trust}")
 
 
 # Database API Ideas
@@ -347,11 +403,11 @@ class SQLiteDB:
         Returns a databaseItem, representing a row in the database
         """
         tfilter = None
-        if type(select) == TimeSelector:
-            qdata, start, end = select.get_data()
+        # if type(select) == TimeSelector:
+        # qdata, start, end = select.get_data()
 
-            self.cursor.execute("select * from pubkey where")
-            # raise InvalidQuery("Invalid Query Type in Function eventQuery")
+        # self.cursor.execute("select * from pubkey where")
+        # # raise InvalidQuery("Invalid Query Type in Function eventQuery")
 
     def write(self, keys: DatabaseItem, write_type: WriteType = WriteType.APPEND):
         """Will write to the list of publicKeys in the database.
@@ -427,6 +483,16 @@ class TestSQLQuery(unittest.TestCase):
 class TestSelectors(unittest.TestCase):
     def test_hash_selector(self):
 
+        # Test None
+        sel = HashSelector(None)
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM events;", q.get_str())
+
+        # Test Empty
+        sel = HashSelector([])
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM events WHERE hash IN ();", q.get_str())
+
         # Test Single
         a, b, c = hashlib.sha256(), hashlib.sha256(), hashlib.sha256()
         a.update(b"test1")
@@ -454,6 +520,17 @@ class TestSelectors(unittest.TestCase):
         )
 
     def test_peer_selector(self):
+
+        # Test None
+        sel = PeerSelector(None)
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM peers;", q.get_str())
+
+        # Test Empty
+        sel = PeerSelector([])
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM peers WHERE peer IN ();", q.get_str())
+
         # Test Single
         a = [("192.168.13.13", 6969)]
         sel = PeerSelector(a)
