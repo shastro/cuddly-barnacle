@@ -11,9 +11,11 @@ from Serial import (
     deserialize_long,
     deserialize_byte,
     deserialize_list,
+    deserialize_str,
     serialize_long,
     serialize_byte,
     serialize_list,
+    serialize_str,
 )
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey as PrivateKey,
@@ -21,7 +23,8 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import (
 from EncryptedStream import (
     ProtocolException,
     EncryptedListener,
-    EncryptedStream
+    EncryptedStream,
+    PeerAddress,
 )
 
 
@@ -37,6 +40,11 @@ class PacketId(Enum):
     # Post event: a peer sends a new event that every other peer on
     # the network can see.
     POST_EVENT = auto()
+
+    # Reroute: a peer sends an event to its predecessor, indicating
+    # that the predecessor should set its successor to a different
+    # node.
+    REROUTE = auto()
 
 
 class Packet:
@@ -150,6 +158,24 @@ class PacketPostEvent(PacketBase):
 
     def serialize(self, stream: BufferedWriter) -> None:
         self._event.serialize(stream)
+
+
+class PacketReroute(PacketBase):
+    """Reroute the network loop."""
+
+    def __init__(self, addr: PeerAddress) -> None:
+        self._addr = addr
+
+    @staticmethod
+    def deserialize(stream: BufferedReader) -> 'PacketReroute':
+        ip_addr = deserialize_str(stream)
+        ip_port = deserialize_long(stream)
+
+        return PacketReroute((ip_addr, ip_port))
+
+    def serialize(self, stream: BufferedWriter) -> None:
+        serialize_str(stream, self._addr[0])
+        serialize_long(stream, self._addr[1])
 
 
 def packet_test() -> None:
