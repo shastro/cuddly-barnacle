@@ -6,56 +6,64 @@ from typing import TypeVar, Callable, List
 T = TypeVar('T')
 
 
-def deserialize_bytes(stream: BufferedReader) -> bytearray:
-    return bytearray(stream.read(deserialize_long(stream)))
+class Deserialize:
+    """Container class for deserialization of standard library Python types."""
+
+    @staticmethod
+    def bytes(stream: BufferedReader) -> bytearray:
+        return bytearray(stream.read(Deserialize.long(stream)))
+
+    @staticmethod
+    def str(stream: BufferedReader) -> str:
+        return Deserialize.bytes(stream).decode('utf-8', 'replace')
+
+    @staticmethod
+    def long(stream: BufferedReader) -> int:
+        return int.from_bytes(stream.read(8), 'big')
+
+    @staticmethod
+    def byte(stream: BufferedReader) -> int:
+        return int.from_bytes(stream.read(1), 'big')
+
+    @staticmethod
+    def list(
+            deserializer: Callable[[BufferedReader], T],
+            stream: BufferedReader,
+    ) -> List[T]:
+        n_items = Deserialize.long(stream)
+        items = []
+        for _ in range(n_items):
+            items.append(deserializer(stream))
+
+        return items
 
 
-def deserialize_str(stream: BufferedReader) -> str:
-    return deserialize_bytes(stream).decode('utf-8', 'replace')
+class Serialize:
+    """Container class for serialization of """
 
+    @staticmethod
+    def bytes(stream: BufferedWriter, value: bytes) -> None:
+        Serialize.long(stream, len(value))
+        stream.write(value)
 
-def deserialize_long(stream: BufferedReader) -> int:
-    return int.from_bytes(stream.read(8), 'big')
+    @staticmethod
+    def str(stream: BufferedWriter, value: str) -> None:
+        Serialize.bytes(stream, value.encode('utf-8'))
 
+    @staticmethod
+    def long(stream: BufferedWriter, value: int) -> None:
+        stream.write(value.to_bytes(8, 'big'))
 
-def deserialize_byte(stream: BufferedReader) -> int:
-    return int.from_bytes(stream.read(1), 'big')
+    @staticmethod
+    def byte(stream: BufferedWriter, value: int) -> None:
+        stream.write(value.to_bytes(1, 'big'))
 
-
-def deserialize_list(
-        deserializer: Callable[[BufferedReader], T],
-        stream: BufferedReader,
-) -> List[T]:
-    n_items = deserialize_long(stream)
-    items = []
-    for _ in range(n_items):
-        items.append(deserializer(stream))
-
-    return items
-
-
-def serialize_bytes(stream: BufferedWriter, value: bytes) -> None:
-    serialize_long(stream, len(value))
-    stream.write(value)
-
-
-def serialize_str(stream: BufferedWriter, value: str) -> None:
-    serialize_bytes(stream, value.encode('utf-8'))
-
-
-def serialize_long(stream: BufferedWriter, value: int) -> None:
-    stream.write(value.to_bytes(8, 'big'))
-
-
-def serialize_byte(stream: BufferedWriter, value: int) -> None:
-    stream.write(value.to_bytes(1, 'big'))
-
-
-def serialize_list(
-        serializer: Callable[[BufferedWriter, T], None],
-        stream: BufferedWriter,
-        value: List[T]
-) -> None:
-    serialize_long(stream, len(value))
-    for item in value:
-        serializer(stream, item)
+    @staticmethod
+    def list(
+            serializer: Callable[[BufferedWriter, T], None],
+            stream: BufferedWriter,
+            value: List[T]
+    ) -> None:
+        Serialize.long(stream, len(value))
+        for item in value:
+            serializer(stream, item)

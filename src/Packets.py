@@ -7,16 +7,7 @@ from typing import List, Optional, cast
 import sys
 
 from Event import Event, EventMessagePost, EventJoin, EventLeave
-from Serial import (
-    deserialize_long,
-    deserialize_byte,
-    deserialize_list,
-    deserialize_str,
-    serialize_long,
-    serialize_byte,
-    serialize_list,
-    serialize_str,
-)
+from Serial import Serialize, Deserialize
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
     X25519PrivateKey as PrivateKey,
 )
@@ -55,7 +46,7 @@ class Packet:
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'Packet':
-        kind = deserialize_byte(stream)
+        kind = Deserialize.byte(stream)
         inner: Optional[PacketBase] = None
         if kind == PacketId.GET_EVENTS.value:
             inner = PacketGetEvents.deserialize(stream)
@@ -70,11 +61,11 @@ class Packet:
 
     def serialize(self, stream: BufferedWriter) -> None:
         if isinstance(self._inner, PacketGetEvents):
-            serialize_byte(stream, PacketId.GET_EVENTS.value)
+            Serialize.byte(stream, PacketId.GET_EVENTS.value)
         elif isinstance(self._inner, PacketGetEventsResp):
-            serialize_byte(stream, PacketId.GET_EVENTS_RESP.value)
+            Serialize.byte(stream, PacketId.GET_EVENTS_RESP.value)
         elif isinstance(self._inner, PacketPostEvent):
-            serialize_byte(stream, PacketId.POST_EVENT.value)
+            Serialize.byte(stream, PacketId.POST_EVENT.value)
         else:
             raise ProtocolException('unknown event ' + str(self._inner))
 
@@ -121,10 +112,10 @@ class PacketGetEvents(PacketBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'PacketGetEvents':
-        return PacketGetEvents(deserialize_long(stream))
+        return PacketGetEvents(Deserialize.long(stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_long(stream, self._since)
+        Serialize.long(stream, self._since)
 
 
 class PacketGetEventsResp(PacketBase):
@@ -135,10 +126,10 @@ class PacketGetEventsResp(PacketBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'PacketGetEventsResp':
-        return PacketGetEventsResp(deserialize_list(Event.deserialize, stream))
+        return PacketGetEventsResp(Deserialize.list(Event.deserialize, stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_list(
+        Serialize.list(
             lambda stream, ev: ev.serialize(stream),
             stream,
             self._events
@@ -168,14 +159,14 @@ class PacketReroute(PacketBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'PacketReroute':
-        ip_addr = deserialize_str(stream)
-        ip_port = deserialize_long(stream)
+        ip_addr = Deserialize.str(stream)
+        ip_port = Deserialize.long(stream)
 
         return PacketReroute((ip_addr, ip_port))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._addr[0])
-        serialize_long(stream, self._addr[1])
+        Serialize.str(stream, self._addr[0])
+        Serialize.long(stream, self._addr[1])
 
 
 def packet_test() -> None:

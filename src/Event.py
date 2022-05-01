@@ -10,16 +10,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from Serial import (
-    deserialize_bytes,
-    deserialize_str,
-    deserialize_long,
-    deserialize_byte,
-    serialize_bytes,
-    serialize_str,
-    serialize_long,
-    serialize_byte,
-)
+from Serial import Serialize, Deserialize
 from EncryptedStream import (
     ProtocolException,
     PublicKey,
@@ -66,7 +57,7 @@ class Event:
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'Event':
-        kind = deserialize_byte(stream)
+        kind = Deserialize.byte(stream)
         inner: Optional[EventBase] = None
         if kind == EventId.MESSAGE_POST.value:
             inner = EventMessagePost.deserialize(stream)
@@ -85,15 +76,15 @@ class Event:
 
     def serialize(self, stream: BufferedWriter) -> None:
         if isinstance(self._inner, EventMessagePost):
-            serialize_byte(stream, EventId.MESSAGE_POST.value)
+            Serialize.byte(stream, EventId.MESSAGE_POST.value)
         elif isinstance(self._inner, EventInvite):
-            serialize_byte(stream, EventId.INVITE.value)
+            Serialize.byte(stream, EventId.INVITE.value)
         elif isinstance(self._inner, EventBan):
-            serialize_byte(stream, EventId.BAN.value)
+            Serialize.byte(stream, EventId.BAN.value)
         elif isinstance(self._inner, EventJoin):
-            serialize_byte(stream, EventId.JOIN.value)
+            Serialize.byte(stream, EventId.JOIN.value)
         elif isinstance(self._inner, EventLeave):
-            serialize_byte(stream, EventId.LEAVE.value)
+            Serialize.byte(stream, EventId.LEAVE.value)
         else:
             raise ProtocolException('unknown event ' + str(self._inner))
 
@@ -124,15 +115,15 @@ class EventMessagePost(EventBase):
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'EventMessagePost':
         return EventMessagePost(
-            deserialize_str(stream),
-            deserialize_long(stream),
-            deserialize_str(stream),
+            Deserialize.str(stream),
+            Deserialize.long(stream),
+            Deserialize.str(stream),
         )
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._author)
-        serialize_long(stream, self._timestamp)
-        serialize_str(stream, self._text)
+        Serialize.str(stream, self._author)
+        Serialize.long(stream, self._timestamp)
+        Serialize.str(stream, self._text)
 
 
 class EventInvite(EventBase):
@@ -145,13 +136,13 @@ class EventInvite(EventBase):
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'EventInvite':
         return EventInvite(
-            deserialize_str(stream),
-            PublicKey.from_public_bytes(deserialize_bytes(stream)),
+            Deserialize.str(stream),
+            PublicKey.from_public_bytes(Deserialize.bytes(stream)),
         )
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._name)
-        serialize_bytes(stream, self._pub_key.public_bytes(
+        Serialize.str(stream, self._name)
+        Serialize.bytes(stream, self._pub_key.public_bytes(
             encoding=Encoding.Raw,
             format=PublicFormat.Raw
         ))
@@ -165,10 +156,10 @@ class EventBan(EventBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'EventBan':
-        return EventBan(deserialize_str(stream))
+        return EventBan(Deserialize.str(stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._name)
+        Serialize.str(stream, self._name)
 
 
 class EventJoin(EventBase):
@@ -179,10 +170,10 @@ class EventJoin(EventBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'EventJoin':
-        return EventJoin(deserialize_str(stream))
+        return EventJoin(Deserialize.str(stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._name)
+        Serialize.str(stream, self._name)
 
 
 class EventLeave(EventBase):
@@ -193,7 +184,7 @@ class EventLeave(EventBase):
 
     @staticmethod
     def deserialize(stream: BufferedReader) -> 'EventLeave':
-        return EventLeave(deserialize_str(stream))
+        return EventLeave(Deserialize.str(stream))
 
     def serialize(self, stream: BufferedWriter) -> None:
-        serialize_str(stream, self._name)
+        Serialize.str(stream, self._name)

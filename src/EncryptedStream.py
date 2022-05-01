@@ -31,12 +31,7 @@ from cryptography.hazmat.primitives.serialization import (
     PublicFormat,
 )
 
-from Serial import (
-    serialize_bytes,
-    deserialize_bytes,
-    serialize_long,
-    deserialize_long,
-)
+from Serial import Serialize, Deserialize
 
 # Explicit re-export so mypy doesn't complain if we re-use these in
 # other files.
@@ -325,13 +320,13 @@ def key_exchange(
     )
 
     # Send and receive public keys.
-    serialize_bytes(
+    Serialize.bytes(
         cast(BufferedWriter, sock),
         our_pk_bytes,
     )
     sock.flush()
 
-    their_pk = PublicKey.from_public_bytes(bytes(deserialize_bytes(
+    their_pk = PublicKey.from_public_bytes(bytes(Deserialize.bytes(
         cast(BufferedReader, sock)
     )))
 
@@ -343,20 +338,20 @@ def key_exchange(
     # Send and receive listener socket addresses. This might be
     # redundant in most cases, but allows clients to run nodes on
     # different ports, which is especially important for debugging.
-    serialize_bytes(
+    Serialize.bytes(
         cast(BufferedWriter, sock),
         local_addr[0].encode('utf-8'),
     )
-    serialize_long(
+    Serialize.long(
         cast(BufferedWriter, sock),
         local_addr[1]
     )
 
     sock.flush()
-    their_ip = deserialize_bytes(
+    their_ip = Deserialize.bytes(
         cast(BufferedReader, sock)
     ).decode('utf-8')
-    their_port = deserialize_long(
+    their_port = Deserialize.long(
         cast(BufferedReader, sock)
     )
     their_addr = (their_ip, their_port)
