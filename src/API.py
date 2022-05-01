@@ -6,42 +6,40 @@ import json
 api = Flask(__name__)
 
 
-@api.route('/login', methods=['POST'])
-def login():
-    data: LoginData = json.loads(
-        request.data,
-        object_hook=lambda d: LoginData(**d)
-    )
-
-    if data.is_valid():
-        return {
-            'success': True,
-            'token': '123',
-        }
-    else:
-        return {
-            'success': False,
-        }
+@api.route('/messages', methods=['GET'])
+def messages():
+    """Retrieves a list of messages falling within a time range."""
+    pass
 
 
-class LoginData:
-    def __init__(self, user: str, password: str) -> None:
-        self.user = user
-        self.password = password
-
-    def is_valid(self) -> bool:
-        return check_credentials(self.user, self.password)
+@api.route('/post', methods=['POST'])
+def post():
+    """Posts a message to the channel."""
+    pass
 
 
-class MessagePostData:
-    def __init__(self, post: str) -> None:
-        pass
+@api.route('/invite', methods=['POST'])
+def invite():
+    """Invites a new user to the channel."""
+    pass
 
 
-def check_credentials(user: str, pwd: str) -> bool:
-    """Temporary stub for checking login credentials."""
+@api.route('/ban', methods=['POST'])
+def ban():
+    """Removes a user from the channel."""
+    pass
 
-    return user == 'alex' and pwd == '12345'
+
+@api.route('/enter', methods=['POST'])
+def enter():
+    """Indicates to other users that you are online."""
+    pass
+
+
+@api.route('/leave', methods=['POST'])
+def leave():
+    """Indicates to other users that you are offline."""
+    pass
 
 
 if __name__ == '__main__':
