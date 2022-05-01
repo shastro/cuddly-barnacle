@@ -27,7 +27,7 @@ from cryptography.hazmat.primitives.ciphers import (
 )
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import (
-    Encoding,
+    Encoding as _Encoding,
     PublicFormat,
 )
 
@@ -37,6 +37,8 @@ from Serial import Serialize, Deserialize
 # other files.
 PrivateKey = _PrivateKey
 PublicKey = _PublicKey
+Encoding = _Encoding
+
 
 # Maximum number of simultaneous connections to allow in the backlog,
 # in the unlikely event that multiple clients connect between `accept`
@@ -44,7 +46,7 @@ PublicKey = _PublicKey
 BACKLOG = 16
 
 # Magic number we use to identify the ChatChat protocol.
-MAGIC = b'ChatChat\n'
+MAGIC = b"ChatChat\n"
 
 # If this is `True`, don't actually encrypt messages. Makes life a bit
 # easier when debugging with Wireshark.
@@ -63,10 +65,10 @@ class EncryptedStream(BufferedIOBase):
     """An encrypted network connection to another computer."""
 
     def __init__(
-            self,
-            inner: BufferedRWPair,
-            outgoing_key: bytes,
-            incoming_key: bytes,
+        self,
+        inner: BufferedRWPair,
+        outgoing_key: bytes,
+        incoming_key: bytes,
     ) -> None:
         """Creates a new EncryptedStream.
 
@@ -81,7 +83,7 @@ class EncryptedStream(BufferedIOBase):
         self._incoming_key = incoming_key
         self._outgoing_key = outgoing_key
 
-        nonce = b'\0' * 16
+        nonce = b"\0" * 16
 
         # Using CTR mode to get a stream cipher.
         self._decryptor: CipherContext = Cipher(
@@ -96,11 +98,11 @@ class EncryptedStream(BufferedIOBase):
 
     @staticmethod
     def connect(
-            our_addr: PeerAddress,
-            other_addr: PeerAddress,
-            private_key: PrivateKey,
-            key_checker: Callable[[PublicKey], bool],
-    ) -> 'EncryptedStream':
+        our_addr: PeerAddress,
+        other_addr: PeerAddress,
+        private_key: PrivateKey,
+        key_checker: Callable[[PublicKey], bool],
+    ) -> "EncryptedStream":
         """Establishes a new connection to `other_addr`.
 
         This function uses public-key cryptography to generate a
@@ -119,7 +121,7 @@ class EncryptedStream(BufferedIOBase):
         # This is annoying: if you look at the source code,
         # `sock.makefile` returns a BufferedRWPair, but mypy isn't
         # convinced of that.
-        bufferpair = cast(BufferedRWPair, sock.makefile('rwb'))
+        bufferpair = cast(BufferedRWPair, sock.makefile("rwb"))
 
         magic_number_check(bufferpair)
         their_addr, c2s, s2c = key_exchange(
@@ -132,10 +134,10 @@ class EncryptedStream(BufferedIOBase):
         return EncryptedStream(bufferpair, c2s, s2c)
 
     def __exit__(
-            self,
-            exc_type: Optional[Type[BaseException]],
-            exc_val: Optional[BaseException],
-            exc_tb: Optional[TracebackType]
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
     ) -> None:
         """Exits a `with` block."""
         BufferedIOBase.__exit__(self, exc_type, exc_val, exc_tb)
@@ -201,10 +203,10 @@ class EncryptedListener:
     """
 
     def __init__(
-            self,
-            addr: PeerAddress,
-            our_private_key: PrivateKey,
-            key_checker: Callable[[PublicKey], bool],
+        self,
+        addr: PeerAddress,
+        our_private_key: PrivateKey,
+        key_checker: Callable[[PublicKey], bool],
     ) -> None:
         """Create a new listener socket.
 
@@ -229,14 +231,14 @@ class EncryptedListener:
         self._private_key = our_private_key
         self._key_checker = key_checker
 
-    def __enter__(self) -> 'EncryptedListener':
+    def __enter__(self) -> "EncryptedListener":
         return self
 
     def __exit__(
-            self,
-            exc_type: Optional[Type[BaseException]],
-            exc_val: Optional[BaseException],
-            exc_tb: Optional[TracebackType]
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
     ) -> None:
         """Exits a `with` block."""
         self._sock.close()
@@ -252,7 +254,7 @@ class EncryptedListener:
         while True:
             try:
                 sock, source_addr = self._sock.accept()
-                buf = cast(BufferedRWPair, sock.makefile('rwb'))
+                buf = cast(BufferedRWPair, sock.makefile("rwb"))
 
                 # BUG: These are blocking operations, which will lock
                 # up the main thread if someone connects and then
@@ -260,10 +262,7 @@ class EncryptedListener:
                 magic_number_check(buf)
 
                 return_addr, c2s, s2c = key_exchange(
-                    buf,
-                    self._private_key,
-                    self._addr,
-                    self._key_checker
+                    buf, self._private_key, self._addr, self._key_checker
                 )
 
                 # If we want to connect to the remote node, we'll use
@@ -273,7 +272,7 @@ class EncryptedListener:
                 return (EncryptedStream(buf, s2c, c2s), addr)
 
             except Exception as e:
-                print('Warning: rejected incoming connection: ' + str(e))
+                print("Warning: rejected incoming connection: " + str(e))
 
 
 def magic_number_check(sock: BufferedRWPair) -> None:
@@ -287,8 +286,8 @@ def magic_number_check(sock: BufferedRWPair) -> None:
     sock.flush()
     response = sock.read(len(MAGIC))
     if response != MAGIC:
-        response_str = response.decode('utf-8', errors='replace')
-        magic_str = MAGIC.decode('utf-8', errors='replace')
+        response_str = response.decode("utf-8", errors="replace")
+        magic_str = MAGIC.decode("utf-8", errors="replace")
         raise VersionException(
             f'got magic number "{response_str}", expected "{magic_str}"'
         )
@@ -296,10 +295,10 @@ def magic_number_check(sock: BufferedRWPair) -> None:
 
 # TODO: rename to `handshake`
 def key_exchange(
-        sock: BufferedRWPair,
-        private_key: PrivateKey,
-        local_addr: PeerAddress,
-        key_checker: Callable[[PublicKey], bool],
+    sock: BufferedRWPair,
+    private_key: PrivateKey,
+    local_addr: PeerAddress,
+    key_checker: Callable[[PublicKey], bool],
 ) -> Tuple[PeerAddress, bytes, bytes]:
     """Performs a key exchange over the socket with the given private key.
 
@@ -326,9 +325,9 @@ def key_exchange(
     )
     sock.flush()
 
-    their_pk = PublicKey.from_public_bytes(bytes(Deserialize.bytes(
-        cast(BufferedReader, sock)
-    )))
+    their_pk = PublicKey.from_public_bytes(
+        bytes(Deserialize.bytes(cast(BufferedReader, sock)))
+    )
 
     if not (DISABLE_KEY_CHECK or key_checker(their_pk)):
         raise SecurityException("rejected peer's public key")
@@ -340,20 +339,13 @@ def key_exchange(
     # different ports, which is especially important for debugging.
     Serialize.bytes(
         cast(BufferedWriter, sock),
-        local_addr[0].encode('utf-8'),
+        local_addr[0].encode("utf-8"),
     )
-    Serialize.long(
-        cast(BufferedWriter, sock),
-        local_addr[1]
-    )
+    Serialize.long(cast(BufferedWriter, sock), local_addr[1])
 
     sock.flush()
-    their_ip = Deserialize.bytes(
-        cast(BufferedReader, sock)
-    ).decode('utf-8')
-    their_port = Deserialize.long(
-        cast(BufferedReader, sock)
-    )
+    their_ip = Deserialize.bytes(cast(BufferedReader, sock)).decode("utf-8")
+    their_port = Deserialize.long(cast(BufferedReader, sock))
     their_addr = (their_ip, their_port)
 
     return (
@@ -362,13 +354,13 @@ def key_exchange(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
-            info=b'Client to server',
+            info=b"Client to server",
         ).derive(shared_key),
         HKDF(
             algorithm=hashes.SHA256(),
             length=32,
             salt=None,
-            info=b'Server to client',
+            info=b"Server to client",
         ).derive(shared_key),
     )
 
@@ -377,7 +369,7 @@ class ProtocolException(Exception):
     """An exception that occurs at the protocol level."""
 
     def __init__(self, reason: str):
-        message = f'protocol error: {reason}'
+        message = f"protocol error: {reason}"
         super().__init__(message)
 
 
@@ -385,7 +377,7 @@ class VersionException(ProtocolException):
     """Raised when we're communicating with a different program version."""
 
     def __init__(self, reason: str):
-        message = f'peer returned wrong magic number: {reason}'
+        message = f"peer returned wrong magic number: {reason}"
         super().__init__(message)
 
 
@@ -393,42 +385,42 @@ class SecurityException(ProtocolException):
     """Raised when security cannot be guaranteed."""
 
     def __init__(self, reason: str):
-        message = f'security error: {reason}'
+        message = f"security error: {reason}"
         super().__init__(message)
 
 
 def basic_test() -> None:
     command = sys.argv[1]
-    if command == 'listen':
+    if command == "listen":
         with EncryptedListener(
-                ('0.0.0.0', 18457),
-                PrivateKey.generate(),
-                lambda k: True,
+            ("0.0.0.0", 18457),
+            PrivateKey.generate(),
+            lambda k: True,
         ) as listener:
             while True:
                 # with listener.accept() as connection:
                 connection, (addr, port) = listener.accept()
 
                 # Test buffering
-                connection.write(b'Hello ')
+                connection.write(b"Hello ")
                 connection.flush()
                 time.sleep(1)
-                connection.write(b'World!')
+                connection.write(b"World!")
 
                 connection.close()
 
-    elif command == 'connect':
+    elif command == "connect":
         with EncryptedStream.connect(
-                ('0.0.0.0', 18457),
-                (sys.argv[2], 18457),
-                PrivateKey.generate(),
-                lambda k: True,
+            ("0.0.0.0", 18457),
+            (sys.argv[2], 18457),
+            PrivateKey.generate(),
+            lambda k: True,
         ) as connection:
             print(connection.read(1000))
 
     else:
-        print('unknown command ' + command)
+        print("unknown command " + command)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     basic_test()
