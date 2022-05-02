@@ -66,7 +66,7 @@ class StableState(NodeState):
 
         readable, writable, exception = select.select(
             [                   # read
-                self._pred,
+                self._pred.selector(),
                 self._info.listener._sock,
             ],
             [],                 # write
@@ -82,7 +82,10 @@ class StableState(NodeState):
             conn, addr = self._info.listener.accept()
 
             # Tell the predecessor that we got a new connection.
-            PacketReroute(addr).serialize(cast(BufferedWriter, self._pred))
+            Packet(PacketReroute(addr)).serialize(
+                cast(BufferedWriter, self._pred)
+            )
+            self._pred.flush()
 
             # Proceed to the hub state.
             return HubState(self._info, self._pred, self._succ, conn, addr)
@@ -131,8 +134,8 @@ class HubState(NodeState):
 
         readable, writable, exception = select.select(
             [                   # read
-                self._pred,
-                self._extra,
+                self._pred.selector(),
+                self._extra.selector(),
             ],
             [],                 # write
             [],                 # accept

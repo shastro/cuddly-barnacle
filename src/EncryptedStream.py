@@ -68,6 +68,7 @@ class EncryptedStream(BufferedIOBase):
     def __init__(
         self,
         inner: BufferedRWPair,
+        selector: int,
         outgoing_key: bytes,
         incoming_key: bytes,
     ) -> None:
@@ -79,8 +80,13 @@ class EncryptedStream(BufferedIOBase):
         stream cipher, these should always be different from each
         other.)
 
+        The first parameter to the function (inner) is the actual
+        object used for exchanging data; the second parameter
+        (selector) is used as a parameter to the `select()` function.
+
         """
         self._inner = inner
+        self._selector = selector
         self._incoming_key = incoming_key
         self._outgoing_key = outgoing_key
 
@@ -132,7 +138,7 @@ class EncryptedStream(BufferedIOBase):
             key_checker,
         )
 
-        return EncryptedStream(bufferpair, c2s, s2c)
+        return EncryptedStream(bufferpair, sock.fileno(), c2s, s2c)
 
     def __exit__(
         self,
@@ -192,6 +198,10 @@ class EncryptedStream(BufferedIOBase):
 
         """
         self._inner.close()
+
+    def selector(self) -> int:
+        """Gets the object to pass to the `select` function."""
+        return self._selector
 
 
 class EncryptedListener:
@@ -270,7 +280,7 @@ class EncryptedListener:
                 # the physical source_addr, but a different port.
                 addr = (source_addr[0], return_addr[1])
 
-                return (EncryptedStream(buf, s2c, c2s), addr)
+                return (EncryptedStream(buf, sock.fileno(), s2c, c2s), addr)
 
             except Exception as e:
                 print("Warning: rejected incoming connection: " + str(e))

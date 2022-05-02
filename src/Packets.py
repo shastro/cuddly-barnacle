@@ -54,6 +54,8 @@ class Packet:
             inner = PacketGetEventsResp.deserialize(stream)
         elif kind == PacketId.POST_EVENT.value:
             inner = PacketPostEvent.deserialize(stream)
+        elif kind == PacketId.REROUTE.value:
+            inner = PacketReroute.deserialize(stream)
         else:
             raise ProtocolException('unknown packet type ' + str(kind))
 
@@ -66,6 +68,8 @@ class Packet:
             Serialize.byte(stream, PacketId.GET_EVENTS_RESP.value)
         elif isinstance(self._inner, PacketPostEvent):
             Serialize.byte(stream, PacketId.POST_EVENT.value)
+        elif isinstance(self._inner, PacketReroute):
+            Serialize.byte(stream, PacketId.REROUTE.value)
         else:
             raise ProtocolException('unknown event ' + str(self._inner))
 
