@@ -125,7 +125,7 @@ class EncryptedStream(BufferedIOBase):
         bufferpair = cast(BufferedRWPair, sock.makefile("rwb"))
 
         magic_number_check(bufferpair)
-        their_addr, c2s, s2c = key_exchange(
+        their_addr, c2s, s2c = handshake(
             bufferpair,
             private_key,
             our_addr,
@@ -262,7 +262,7 @@ class EncryptedListener:
                 # doesn't send any data.
                 magic_number_check(buf)
 
-                return_addr, c2s, s2c = key_exchange(
+                return_addr, c2s, s2c = handshake(
                     buf, self._private_key, self._addr, self._key_checker
                 )
 
@@ -294,8 +294,7 @@ def magic_number_check(sock: BufferedRWPair) -> None:
         )
 
 
-# TODO: rename to `handshake`
-def key_exchange(
+def handshake(
     sock: BufferedRWPair,
     private_key: PrivateKey,
     local_addr: PeerAddress,
