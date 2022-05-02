@@ -35,6 +35,7 @@ import datetime
 import hashlib
 import logging
 import sqlite3
+from types import NoneType
 import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
@@ -152,7 +153,7 @@ class HashSelector(DatabaseSelector):
     Useful for selecting the list of blobs that match the given list of hashes.
     """
 
-    def __init__(self, hashes: List[HASH]):
+    def __init__(self, hashes: Optional[List[HASH]]):
         self._hashes = hashes
         self._query = SQLQuery("events")
 
@@ -180,7 +181,7 @@ class HashSelector(DatabaseSelector):
 class PeerSelector(DatabaseSelector):
     """Class that will produce selections on the peers"""
 
-    def __init__(self, peers: List[PeerAddress]):
+    def __init__(self, peers: Optional[List[PeerAddress]]):
         """Create a new PeerSelector
 
         :param peers: List of peers to match against. Passing None will query
@@ -215,7 +216,7 @@ class PeerSelector(DatabaseSelector):
 
 
 class PubKeySelector(DatabaseSelector):
-    def __init__(self, keys: List[PublicKey]):
+    def __init__(self, keys: Optional[List[PublicKey]]):
         """Create a new PublicKeySelector
 
         This will match against publickeys in the provided list. Providing
@@ -283,6 +284,8 @@ class TrustSelector(DatabaseSelector):
 
     def __init__(self, cls: DatabaseSelector, trust: bool):
         self._cls = cls
+        if type(self._cls) == HashSelector:
+            raise TypeError("Cannot use TrustSelector on HashSelector")
         self._property = "timestamp"
         self._trust = int(trust)
 
@@ -647,10 +650,50 @@ class TestSelectors(unittest.TestCase):
         ).hex()
         a.append(key2)
         a.append(key3)
-
+        self.maxDiff = None
         sel = TimeSelector(PubKeySelector(a), start, end)  # type: ignore
         self.assertEqual(
             f"SELECT * FROM keys WHERE publickey IN ('{key}','{key2}','{key3}') AND {wherestr};",
+            sel.get_query().get_str(),
+        )
+
+    def test_trust_selector(self):
+
+        # Test Exception
+        with self.assertRaises(TypeError):
+            sel = TrustSelector(HashSelector(None), True)
+
+        # Test None
+        sel = TrustSelector(PeerSelector(None), False)
+        q = sel.get_query()
+        self.assertEqual("SELECT * FROM peers WHERE trust = 0;", q.get_str())
+
+        # Test Empty
+        sel = TrustSelector(PeerSelector([]), True)
+        q = sel.get_query()
+        self.assertEqual(
+            "SELECT * FROM peers WHERE peer IN () AND trust = 1;", q.get_str()
+        )
+
+        # Test PeerSelector
+        a = [("192.168.13.13", 6969)]
+        sel = TrustSelector(PeerSelector(a), False)
+        self.assertEqual(
+            "SELECT * FROM peers WHERE (addr = '192.168.13.13' AND port = 6969) AND trust = 0;",
+            sel.get_query().get_str(),
+        )
+
+        # Test PubKeySelector
+        key = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+
+        a = [key]
+        sel = TrustSelector(PubKeySelector(a), True)  # type: ignore
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN ('{key}') AND trust = 1;",
             sel.get_query().get_str(),
         )
 
