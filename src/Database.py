@@ -596,6 +596,64 @@ class TestSelectors(unittest.TestCase):
             sel.get_query().get_str(),
         )
 
+    def test_time_selector(self):
+
+        # Test None
+        start = datetime.datetime(2009, 10, 20, hour=0, minute=39, second=0)
+        end = datetime.datetime.now()
+        sel = TimeSelector(PubKeySelector(None), start, end)
+        q = sel.get_query()
+
+        wherestr = (
+            f"timestamp >= {start.timestamp()} AND timestamp <= {end.timestamp()}"
+        )
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE {wherestr};",
+            q.get_str(),
+        )
+
+        key = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+
+        # Test Empty
+        sel = TimeSelector(PubKeySelector([]), start, end)
+        q = sel.get_query()
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN () AND {wherestr};",
+            q.get_str(),
+        )
+
+        # Test Single
+        a = [key]
+        sel = TimeSelector(PubKeySelector(a), start, end)  # type: ignore
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN ('{key}') AND {wherestr};",
+            sel.get_query().get_str(),
+        )
+
+        # Test Multiple
+        key2 = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+        key3 = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+        a.append(key2)
+        a.append(key3)
+
+        sel = TimeSelector(PubKeySelector(a), start, end)  # type: ignore
+        self.assertEqual(
+            f"SELECT * FROM keys WHERE publickey IN ('{key}','{key2}','{key3}') AND {wherestr};",
+            sel.get_query().get_str(),
+        )
+
 
 def main():
     """Entry Point for testing"""
