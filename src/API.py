@@ -1,12 +1,9 @@
 """External API for controlling the node."""
 
-from flask import Flask, request, render_template, url_for
+from flask import Flask, request, render_template
 import json
 from typing import Optional
-from EncryptedStream import (
-    PublicKey,
-    PublicFormat,
-)
+from EncryptedStream import PublicKey
 
 app = Flask(__name__)
 
