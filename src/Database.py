@@ -545,22 +545,22 @@ class SQLiteDB:
             raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
 
         if self.fname is not None:
-            if path.exists(self.fname.as_posix()):
-                if force:
+            if force:
+                if os.path.exists(self.fname.as_posix()):
                     os.remove(self.fname.as_posix())
-                    self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
-                    self.cursor = self.connection.cursor()
-                    self.cursor.execute(
-                        "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-                    )
+                self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
+                self.cursor = self.connection.cursor()
+                self.cursor.execute(
+                    "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+                )
 
-                    self.cursor.execute(
-                        "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-                    )
+                self.cursor.execute(
+                    "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+                )
 
-                    self.cursor.execute(
-                        "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
-                    )
+                self.cursor.execute(
+                    "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
+                )
 
         self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
@@ -791,7 +791,7 @@ class TestDataBase(unittest.TestCase):
 
         A = [into_items[-1].serialize()]
         B = [b.serialize() for b in out_items]
-        print(A, B)
+        # print(A, B)
         self.assertCountEqual(
             A, B
         )  # Actually tests that lists are the same regardless of order
