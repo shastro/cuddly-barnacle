@@ -1,6 +1,6 @@
 """External API for controlling the node."""
 
-from flask import Flask, request, render_template
+from flask import Flask, request, render_template, flash
 import json
 from typing import Optional
 from EncryptedStream import PublicKey
@@ -12,14 +12,16 @@ app = Flask(__name__)
 def index():
     # body = request.values.get('Body', None)
     # text = request.form['From']
-    return render_template('index.html')
+    return render_template('index.html', messages=data)
 
 
-@app.route('/messages', methods=['GET'])
+@app.route('/messages', methods=['GET', 'POST'])
 def messages():
     """Retrieves a list of messages falling within a time range."""
     data = MessagesReqBody(**request.args)
     print(data)
+    return render_template('test.html', messages=data)
+    # return render_template('msg.html', messages=data)
 
     # TODO: do something with data
 
@@ -92,7 +94,6 @@ class InviteReqBody:
 class BanReqBody:
     def __init__(self, name: str):
         self.name = name
-
 
 if __name__ == '__main__':
     app.run()
