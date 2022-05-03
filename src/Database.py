@@ -541,26 +541,29 @@ class SQLiteDB:
 
         """
 
-        if self.fname is not None:
-            if path.exists(self.fname.as_posix()) and force == True:
-                os.remove(self.fname.as_posix())
-
         if self.connection is not None:
             raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
 
+        if self.fname is not None:
+            if path.exists(self.fname.as_posix()):
+                if force:
+                    os.remove(self.fname.as_posix())
+                    self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
+                    self.cursor = self.connection.cursor()
+                    self.cursor.execute(
+                        "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+                    )
+
+                    self.cursor.execute(
+                        "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+                    )
+
+                    self.cursor.execute(
+                        "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
+                    )
+
         self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
-        self.cursor.execute(
-            "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-        )
-
-        self.cursor.execute(
-            "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-        )
-
-        self.cursor.execute(
-            "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
-        )
 
     def connect(self):
         """Connect to the database for operations. Will not create a new database"""
@@ -805,11 +808,12 @@ class TestDataBase(unittest.TestCase):
         )
 
         db.write(into_items, WriteType.APPEND)
+        db.write([], WriteType.SYNC, Tables.PEER_TABLE)
 
         out_items = db.query(PeerSelector(None))
         out_items += db.query(HashSelector(None))
 
-        A = [a.serialize() for a in into_items]
+        A = [into_items[-1].serialize()]
         B = [b.serialize() for b in out_items]
 
         self.assertCountEqual(
