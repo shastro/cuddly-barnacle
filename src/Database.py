@@ -19,7 +19,7 @@ True Names and Types
 Accepted PubKey Table
 -----------------
 Table Name: keys
-- PubKey - Last seen timestamp - trust flag
+- PubKey - Last seen time stamp - trust flag
 - publickey: TEXT - timestamp: REAL - trust: INTEGER
 
 Event Table
@@ -39,6 +39,8 @@ from types import NoneType
 import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
+import os
+from os import path
 from os import PathLike
 from pathlib import PurePath
 from sqlite3.dbapi2 import Date
@@ -60,11 +62,25 @@ from typing import (
 from EncryptedStream import PrivateKey, PublicKey, PeerAddress, Encoding, PublicFormat
 from Environment import Env
 
-
+# Globals
 env = Env()
 # Generic Type Var
 T = TypeVar("T")
 DateTime = datetime.datetime
+
+# Global Vars
+PEER_TABLE = "peers"
+EVENT_TABLE = "events"
+KEY_TABLE = "keys"
+
+
+@unique
+class Tables(Enum):
+    """Enum to represent the table names that are possible"""
+
+    PEER_TABLE = PEER_TABLE
+    EVENT_TABLE = EVENT_TABLE
+    KEY_TABLE = KEY_TABLE
 
 
 @unique
@@ -92,6 +108,19 @@ class WriteType(Enum):
     DELETE = auto()
     SYNC = auto()
     APPEND = auto()
+
+
+def where_gen(kwargs) -> str:
+    """Utility function for generating where cases given a tuple of items to match"""
+    base = ""
+    items = list(kwargs.items())
+    for k, v in items[:-1]:
+        base += f"('{k}' = {v}) AND "
+
+    k, v = items[-1]
+    base += f"('{k}' = {v})"
+
+    return base
 
 
 class SQLQuery:
@@ -146,16 +175,37 @@ class DatabaseSelector(ABC):
         """Function to return the SQLQuery object representing the selection choice(s)"""
         pass
 
+    @abstractclassmethod
+    def get_item_type():
+        """Function to return the associated object for each selector
+
+        :returns: A reference to a python object
+
+        """
+        pass
+
+    @abstractclassmethod
+    def get_table_name() -> str:
+        """Function to return the table name from which the selector selects from
+
+        :returns: str table name
+
+        """
+        pass
+
 
 class HashSelector(DatabaseSelector):
-    """Class representing a query to the database looking for matches on other properties that match the list of hashes.
+    """Class representing a query to the database looking for matches on other
+    properties that match the list of hashes.
 
     Useful for selecting the list of blobs that match the given list of hashes.
     """
 
-    def __init__(self, hashes: Optional[List[HASH]]):
+    def __init__(self, hashes: Optional[List[str]]):
         self._hashes = hashes
-        self._query = SQLQuery("events")
+        self._table_name = EVENT_TABLE
+        self._query = SQLQuery(self._table_name)
+        self._item_type = EventItem
 
     def get_query(self):
         """Get the query associated with HashSelector
@@ -171,11 +221,17 @@ class HashSelector(DatabaseSelector):
 
         base = "hash IN ("
         for h in self._hashes[:-1]:
-            base += f"'{h.hexdigest()}',"
+            base += f"'{h}',"
 
-        base += f"'{self._hashes[-1].hexdigest()}')"
+        base += f"'{self._hashes[-1]}')"
         self._query.where(base)
         return self._query
+
+    def get_item_type(self):
+        return self._item_type
+
+    def get_table_name(self):
+        return self._table_name
 
 
 class PeerSelector(DatabaseSelector):
@@ -190,7 +246,9 @@ class PeerSelector(DatabaseSelector):
 
         """
         self._peers = peers
-        self._query = SQLQuery("peers")
+        self._table_name = PEER_TABLE
+        self._query = SQLQuery(self._table_name)
+        self._item_type = PeerItem
 
     def get_query(self):
         """Get the query associated with PeerSelector
@@ -214,9 +272,15 @@ class PeerSelector(DatabaseSelector):
 
         return self._query
 
+    def get_item_type(self):
+        return self._item_type
+
+    def get_table_name(self):
+        return self._table_name
+
 
 class PubKeySelector(DatabaseSelector):
-    def __init__(self, keys: Optional[List[PublicKey]]):
+    def __init__(self, keys: Optional[List[str]]):
         """Create a new PublicKeySelector
 
         This will match against publickeys in the provided list. Providing
@@ -228,7 +292,9 @@ class PubKeySelector(DatabaseSelector):
 
         """
         self._keys = keys
-        self._query = SQLQuery("keys")
+        self._table_name = KEY_TABLE
+        self._query = SQLQuery(self._table_name)
+        self._item_type = PubKeyItem
 
     def get_query(self):
 
@@ -246,6 +312,12 @@ class PubKeySelector(DatabaseSelector):
         self._query.where(base)
         return self._query
 
+    def get_item_type(self):
+        return self._item_type
+
+    def get_table_name(self):
+        return self._table_name
+
 
 # DecoratorClass
 class TimeSelector(DatabaseSelector):
@@ -261,6 +333,8 @@ class TimeSelector(DatabaseSelector):
         self._property = "timestamp"
         self._start = start
         self._end = end
+        self._item_type = self._cls.get_item_type()
+        self._table_name = self._cls.get_table_name()
 
     def get_query(self):
         tstart = self._start.timestamp()
@@ -271,6 +345,12 @@ class TimeSelector(DatabaseSelector):
             .where(f"timestamp >= {tstart}")
             .where(f"timestamp <= {tend}")
         )
+
+    def get_item_type(self):
+        return self._item_type
+
+    def get_table_name(self):
+        return self._table_name
 
 
 # DecoratorClass
@@ -288,9 +368,17 @@ class TrustSelector(DatabaseSelector):
             raise TypeError("Cannot use TrustSelector on HashSelector")
         self._property = "timestamp"
         self._trust = int(trust)
+        self._item_type = self._cls.get_item_type()
+        self._table_name = self._cls.get_table_name()
 
     def get_query(self):
         return self._cls.get_query().where(f"trust = {self._trust}")
+
+    def get_item_type(self):
+        return self._item_type
+
+    def get_table_name(self):
+        return self._table_name
 
 
 # Database API Ideas
@@ -301,49 +389,128 @@ class TrustSelector(DatabaseSelector):
 class DatabaseItem(ABC):
     """Abstract Base Class for database items"""
 
+    @abstractclassmethod
     def serialize():
         pass
 
-    @staticmethod
+    @abstractclassmethod
     def deserialize():
+        pass
+
+    @abstractclassmethod
+    def as_dict() -> dict:  # type: ignore
+        pass
+
+    @abstractclassmethod
+    def get_table_name():
         pass
 
 
 class EventItem(DatabaseItem):
     """EventItem, represents a row in the event table"""
 
-    def __init__(self, blob: bytearray, hash: HASH, timestamp: DateTime):
+    def __init__(self, timestamp: DateTime, hash: str, blob: bytearray):
+        """Create a new EventItem.
+
+        :param timestamp: DateTime object representing the timestamp of the event
+        :param hash: string representing the hexdigest of the hash
+        :param blob: bytearray representing the blob bytes
+        :returns:
+
+        """
+        self._table_name = EVENT_TABLE
         self._blob = blob
         self._hash = hash
-        self._timestamp = timestamp
+        self._timestamp = timestamp.timestamp()
+        self._item_type = PeerItem
 
-    def serialize():
-        pass
+    def serialize(self):
+        return f"{self._timestamp}, {self._hash}, {self._blob.hex()}"
 
-    def deserialize():
-        return
-
-
-class IpItem(DatabaseItem):
-    """IpItem, represents a row in the accepted IP table"""
-
-    def serialize():
-        pass
+    def as_dict(self) -> dict:
+        return {"": self._timestamp, "hash": self._hash, "event": self._blob.hex()}
 
     @staticmethod
-    def deserialize():
-        pass
+    def deserialize(timestamp: float, hash: str, event: bytearray):
+        return EventItem(datetime.datetime.fromtimestamp(timestamp), hash, event)
+
+    def get_table_name(self):
+        return self._table_name
+
+
+class PeerItem(DatabaseItem):
+    """PeerItem, represents a row in the peers table"""
+
+    def __init__(self, addr: str, port: int, timestamp: DateTime, trust: bool):
+        self._table_name = PEER_TABLE
+        self._addr = addr
+        self._port = port
+        self._timestamp = timestamp.timestamp()
+        self._trust = trust
+
+    def serialize(self):
+        return (
+            f"'{self._addr}', {int(self._port)}, {self._timestamp}, {int(self._trust)}"
+        )
+
+    def as_dict(self) -> dict:
+        return {
+            "addr": self._addr,
+            "port": int(self._port),
+            "timestmap": self._timestamp,
+            "trust": int(self._trust),
+        }
+
+    @staticmethod
+    def deserialize(addr: str, port: int, timestamp: float, trust: int) -> "PeerItem":
+        return PeerItem(
+            addr, port, datetime.datetime.fromtimestamp(timestamp), bool(trust)
+        )
+
+    def get_table_name(self):
+        return self._table_name
 
 
 class PubKeyItem(DatabaseItem):
     """PublicKeyItem, represents a row in the pubkey table"""
 
-    def serialize():
-        pass
+    def __init__(self, key: str, timestamp: DateTime, trust: bool):
+        """Create a new public key item
+
+        :param key: hex string encoding of the publickey
+        :param timestamp: DateTime object representing the last seen timestamp of the key
+        :param trust: boolean trust flag
+        :returns: None
+
+        """
+        self._table_name = KEY_TABLE
+        self._key = key
+        self._table_name = "keys"
+        self._timestamp = timestamp.timestamp()
+        self._trust = trust
+
+    def serialize(self) -> str:
+        """Serializes the row into a string ready to be inserted using sqlite3 cursors
+
+        :returns: String representation.
+
+        """
+        return f"'{self._key}', {int(self._timestamp)}, {int(self._trust)}"
+
+    def as_dict(self) -> dict:
+        return {
+            "publickey": self._key,
+            "timestamp": int(self._timestamp),
+            "trust": int(self._trust),
+        }
 
     @staticmethod
-    def deserialize():
-        pass
+    def deserialize(key: str, timestamp: float, trust: int) -> "PubKeyItem":
+        """Produces a PubKeyItem object given the raw output from sql"""
+        return PubKeyItem(key, datetime.datetime.fromtimestamp(timestamp), bool(trust))
+
+    def get_table_name(self):
+        return self._table_name
 
 
 class SQLiteDB:
@@ -354,7 +521,7 @@ class SQLiteDB:
 
     """
 
-    def __init__(self, dbpath: PurePath = None) -> None:
+    def __init__(self, dbpath: PurePath) -> None:
         """Instantiate and set filename"""
         self.fname = dbpath
         self.connection = None
@@ -362,7 +529,7 @@ class SQLiteDB:
         self.changed = False
         self.committed = False
 
-    def createEmpty(self, ifname: PurePath = None, force: bool = False):
+    def createEmpty(self, force: bool = False):
         """Create an empty database with our specified format.
 
         Will not by default overwrite an existing database unless the `force`
@@ -371,20 +538,36 @@ class SQLiteDB:
 
         """
 
-        if not self.fname:
-            self.fname = ifname
-        self.fname = ifname
+        if self.fname is not None:
+            if path.exists(self.fname.as_posix()) and force == True:
+                os.remove(self.fname.as_posix())
 
         if self.connection is not None:
             raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
 
         self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
+        self.cursor.execute(
+            "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+        )
+
+        self.cursor.execute(
+            "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+        )
+
+        self.cursor.execute(
+            "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
+        )
 
     def connect(self):
-        """Connect to the database for operations. Will also create a new database"""
+        """Connect to the database for operations. Will not create a new database"""
         if self.connection is not None:
             raise ConnectionAlreadyExists(self.fname.as_posix())  # type: ignore
+
+        try:
+            self.connection = sqlite3.connect(self.fname.as_posix())
+        except Exception:
+            raise ConnectionError(self.fname.as_posix())
 
     def commit(self):
         """Commit changes to the database."""
@@ -404,22 +587,80 @@ class SQLiteDB:
     def query(self, select: DatabaseSelector):
         """Return the requested information based on a query type, which may be decorated.
 
-        Returns a databaseItem, representing a row in the database
+        Returns a list of DatabaseItems, each representing a row in the database
         """
-        tfilter = None
-        # if type(select) == TimeSelector:
-        # qdata, start, end = select.get_data()
+        print("QUERY")
+        rescursor = self.cursor.execute(select.get_query().get_str())  # type: ignore
 
-        # self.cursor.execute("select * from pubkey where")
-        # # raise InvalidQuery("Invalid Query Type in Function eventQuery")
+        ItemType = select.get_item_type()
+        if ItemType == None:
+            raise DatabaseException("ItemType cannot be None")
 
-    def write(self, keys: DatabaseItem, write_type: WriteType = WriteType.APPEND):
-        """Will write to the list of publicKeys in the database.
+        dbitems = []
+        for item in rescursor.fetchall():
+            print(item)
+            dbitems.append(ItemType.deserialize(*item))
 
-        Will append by default
+        return dbitems
+        # raise InvalidQuery("Invalid Query Type in Function eventQuery")
+
+    def write(
+        self,
+        items: List[DatabaseItem],
+        write_type: WriteType = WriteType.APPEND,
+        table_name: str = None,
+    ):
+        """Will write the input item to the database using the specified WriteMode
+
+        Will append by default. If you wish to delete everything from a table pass an empty list to the argument keys and specify a table name in the optional table_name argument
 
         """
-        pass
+        if len(items) < 1:
+            if table_name is not None:
+                if write_type == WriteType.SYNC:
+                    raise WriteError(
+                        "Cannot specify table type if non-empty items due to type ambiguity on SYNC operations."
+                    )
+
+        if self.cursor == None:
+            raise WriteError("Cursor is None in write()")
+
+        if write_type == WriteType.APPEND:
+            """Can just insert into the database"""
+            for item in items:
+                self.cursor.execute(  # type: ignore
+                    f"INSERT INTO {item.get_table_name()} VALUES ({item.serialize()});"  # type: ignore
+                )  # type: ignore
+
+        elif write_type == WriteType.SYNC:
+            """Need table name to synchronize without a table name"""
+            if table_name is None:
+                raise WriteError("Cannot SYNC without specifying a table name")
+
+            # Delete from table
+            self.cursor.execute(f"DELETE * FROM {table_name}")
+            for item in items:
+                if item.get_table_name() != table_name:
+                    raise WriteError(
+                        f"Cannot synchronize multiple item types on mismatching table name. Tried to delete from {table_name} on object from {item.get_table_name()}"
+                    )
+
+                self.cursor.execute(
+                    f"DELETE FROM {item.get_table_name()} WHERE {where_gen(item.as_dict())};"
+                )
+
+        elif write_type == WriteType.DELETE:
+            """Delete no items from the database if you pass an empty list"""
+            if len(items) == 0:
+                return None
+            else:
+                """Delete the specified items from the database"""
+                for item in items:
+                    self.cursor.execute(
+                        f"DELETE FROM {item.get_table_name()} WHERE {where_gen(item.as_dict())}"
+                    )
+
+        self.cursor.execute("COMMIT")
 
 
 class DatabaseException(Exception):
@@ -453,11 +694,55 @@ class ConnectionAlreadyClosed(DatabaseException):
         super().__init__(self.message)
 
 
+class ConnectionError(DatabaseException):
+    """Raised when a connection could not be made. Have you created a database?"""
+
+    def __init__(self, iconnection_name: Optional[str]) -> None:
+        self.connection_name = iconnection_name
+        self.message = f"Connection <{self.connection_name}> does not exist."
+        super().__init__(self.message)
+
+
+class WriteError(DatabaseException):
+    """Raised when a write could not be made. Have you created a database?"""
+
+    def __init__(self, reason: Optional[str]) -> None:
+        self.message = f"Write could not be made: {reason}"
+        super().__init__(self.message)
+
+
 ###########
 # TESTING #
 ###########
+class TestDataBase(unittest.TestCase):
+    def test_utils(self):
+        self.assertEqual(
+            "('thing1' = 1) AND ('thing2' = 2) AND ('thing3' = 3)",
+            where_gen({"thing1": 1, "thing2": 2, "thing3": 3}),
+        )
+
+    def test_write_modes(self):
+        env = Env()
+        db = SQLiteDB(env.get_database_path())
+        db.createEmpty(force=True)
+        db.write(
+            [PeerItem("192.168.32.32", 6969, datetime.datetime.now(), True)],
+            WriteType.APPEND,
+        )
+
+        db.write(
+            [PeerItem("192.100.32.32", 6969, datetime.datetime.now(), True)],
+            WriteType.APPEND,
+        )
+
+        db.write(
+            [PeerItem("192.000.32.32", 6969, datetime.datetime.now(), True)],
+            WriteType.APPEND,
+        )
+
+
 class TestSQLQuery(unittest.TestCase):
-    def test_nowhere(self):
+    def test_no_where(self):
         query = SQLQuery("ipaddrs")
         self.assertEqual(
             "SELECT * FROM ipaddrs;",
@@ -502,7 +787,7 @@ class TestSelectors(unittest.TestCase):
         a.update(b"test1")
         adigest = a.hexdigest()
 
-        sel = HashSelector([a])
+        sel = HashSelector([adigest])
         q = sel.get_query()
         self.assertEqual(
             f"SELECT * FROM events WHERE hash IN ('{adigest}');",
@@ -512,10 +797,11 @@ class TestSelectors(unittest.TestCase):
         b.update(b"test2")
         c.update(b"test3")
 
-        sel = HashSelector([a, b, c])
-        q = sel.get_query()
         bdigest = b.hexdigest()
         cdigest = c.hexdigest()
+
+        sel = HashSelector([adigest, bdigest, cdigest])
+        q = sel.get_query()
         self.maxDiff = None
 
         self.assertEqual(
