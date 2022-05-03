@@ -820,6 +820,30 @@ class TestDataBase(unittest.TestCase):
             A, B
         )  # Actually tests that lists are the same regardless of order
 
+        # Key Test
+        into_items = []
+        key = (
+            PrivateKey.generate()
+            .public_key()
+            .public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        ).hex()
+
+        a = [key]
+        sel = PubKeySelector(a)  # type: ignore
+
+        into_items = [PubKeyItem(key, datetime.datetime.now(), False)]
+        db.write(into_items, WriteType.SYNC, Tables.KEY_TABLE)  # type: ignore
+        out_items = db.query(TrustSelector(PubKeySelector(a), True))
+        self.assertCountEqual([], out_items)
+        out_items = db.query(TrustSelector(PubKeySelector(a), False))
+
+        A = [a.serialize() for a in into_items]
+        B = [b.serialize() for b in out_items]
+
+        self.assertCountEqual(
+            A, B
+        )  # Actually tests that lists are the same regardless of order
+
     def test_write_append(self):
         env = Env()
         db = SQLiteDB(env.get_database_path())
@@ -903,8 +927,16 @@ class TestDataBase(unittest.TestCase):
         sel = PubKeySelector(a)  # type: ignore
 
         into_items = [PubKeyItem(key, datetime.datetime.now(), True)]
-        db.write(into_items, WriteType.APPEND)
+        db.write(into_items, WriteType.APPEND)  # type: ignore
         out_items = db.query(PubKeySelector(a))
+        print(into_items)
+
+        A = [a.serialize() for a in into_items]
+        B = [b.serialize() for b in out_items]
+
+        self.assertCountEqual(
+            A, B
+        )  # Actually tests that lists are the same regardless of order
 
 
 class TestSQLQuery(unittest.TestCase):
