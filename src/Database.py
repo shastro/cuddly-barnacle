@@ -25,7 +25,7 @@ Table Name: keys
 Event Table
 -----------------
 Table Name: events
-- recv timestamp - event hash - event blob
+- recv timestamp - event hash - event blob encoded as hexstrings
 - timestamp: REAL - hash: TEXT - event: BLOB
 
 We store trust flags since we might want to know who is banned or not.
@@ -422,17 +422,18 @@ class EventItem(DatabaseItem):
         self._blob = blob
         self._hash = hash
         self._timestamp = timestamp.timestamp()
-        self._item_type = PeerItem
 
     def serialize(self):
-        return f"{self._timestamp}, {self._hash}, {self._blob.hex()}"
+        return (self._timestamp, str(self._hash), bytes(self._blob))
 
     def as_dict(self) -> dict:
         return {"": self._timestamp, "hash": self._hash, "event": self._blob.hex()}
 
     @staticmethod
-    def deserialize(timestamp: float, hash: str, event: bytearray):
-        return EventItem(datetime.datetime.fromtimestamp(timestamp), hash, event)
+    def deserialize(timestamp: float, hash: str, event: bytes):
+        return EventItem(
+            datetime.datetime.fromtimestamp(timestamp), hash, bytearray(event)
+        )
 
     def get_table_name(self):
         return self._table_name
@@ -449,15 +450,13 @@ class PeerItem(DatabaseItem):
         self._trust = trust
 
     def serialize(self):
-        return (
-            f"'{self._addr}', {int(self._port)}, {self._timestamp}, {int(self._trust)}"
-        )
+        return (self._addr, int(self._port), self._timestamp, int(self._trust))
 
     def as_dict(self) -> dict:
         return {
             "addr": self._addr,
             "port": int(self._port),
-            "timestmap": self._timestamp,
+            "timestamp": self._timestamp,
             "trust": int(self._trust),
         }
 
@@ -489,13 +488,13 @@ class PubKeyItem(DatabaseItem):
         self._timestamp = timestamp.timestamp()
         self._trust = trust
 
-    def serialize(self) -> str:
-        """Serializes the row into a string ready to be inserted using sqlite3 cursors
+    def serialize(self) -> Tuple:
+        """Serializes the row into a tuple ready to be inserted using sqlite3 cursors
 
-        :returns: String representation.
+        :returns: tuple representation.
 
         """
-        return f"'{self._key}', {int(self._timestamp)}, {int(self._trust)}"
+        return (str(self._key), int(self._timestamp), int(self._trust))
 
     def as_dict(self) -> dict:
         return {
@@ -582,16 +581,19 @@ class SQLiteDB:
 
         if self.changed and self.committed is False:
             logging.warning("Closed connection without committing changes")
-        self.connection.close()
 
-    def query(self, select: DatabaseSelector):
+        self.connection.close()
+        self.connection = None
+
+    def query(self, select: DatabaseSelector) -> List[DatabaseItem]:
         """Return the requested information based on a query type, which may be decorated.
 
         Returns a list of DatabaseItems, each representing a row in the database
         """
-        print("QUERY")
+
         rescursor = self.cursor.execute(select.get_query().get_str())  # type: ignore
 
+        print(select.get_query().get_str())
         ItemType = select.get_item_type()
         if ItemType == None:
             raise DatabaseException("ItemType cannot be None")
@@ -615,6 +617,9 @@ class SQLiteDB:
         Will append by default. If you wish to delete everything from a table pass an empty list to the argument keys and specify a table name in the optional table_name argument
 
         """
+        if items is None:
+            raise WriteError("Cannot write None into database")
+
         if len(items) < 1:
             if table_name is not None:
                 if write_type == WriteType.SYNC:
@@ -627,9 +632,15 @@ class SQLiteDB:
 
         if write_type == WriteType.APPEND:
             """Can just insert into the database"""
+
+            # Cannot insert 0 items
+            if len(items) == 0:
+                return
+
             for item in items:
                 self.cursor.execute(  # type: ignore
-                    f"INSERT INTO {item.get_table_name()} VALUES ({item.serialize()});"  # type: ignore
+                    f"INSERT INTO {item.get_table_name()} VALUES ({'?,'*(len(item.serialize())-1)}?);",  # type:ignore
+                    item.serialize(),  # type: ignore
                 )  # type: ignore
 
         elif write_type == WriteType.SYNC:
@@ -721,24 +732,81 @@ class TestDataBase(unittest.TestCase):
             where_gen({"thing1": 1, "thing2": 2, "thing3": 3}),
         )
 
-    def test_write_modes(self):
+    def test_write_append(self):
         env = Env()
         db = SQLiteDB(env.get_database_path())
         db.createEmpty(force=True)
+
+        # Test None
+        into_items = None
+        with self.assertRaises(WriteError):
+            db.write(into_items, WriteType.APPEND)  # type: ignore
+
+        # Test Empty
+        into_items = []
+        db.write(into_items, WriteType.APPEND)
+
+        # Test Single
+        into_items.append(
+            PeerItem("192.168.32.32", 6969, datetime.datetime.now(), True)
+        )
         db.write(
-            [PeerItem("192.168.32.32", 6969, datetime.datetime.now(), True)],
+            into_items,
             WriteType.APPEND,
         )
+        out_items = db.query(PeerSelector(None))
+        for inp, outp in zip(into_items, out_items):
+            self.assertEqual(inp.as_dict(), outp.as_dict())
+
+        # Test Multiple
+        # Reset since python lists allow duplicates
+        into_items = []
+        db.close()
+        db.createEmpty(force=True)
+
+        into_items.append(
+            PeerItem("192.100.100.100", 6000, datetime.datetime.now(), True)
+        )
+        into_items.append(PeerItem("192.0.0.0", 1000, datetime.datetime.now(), False))
 
         db.write(
-            [PeerItem("192.100.32.32", 6969, datetime.datetime.now(), True)],
+            into_items,
             WriteType.APPEND,
+        )
+        out_items = db.query(PeerSelector(None))
+
+        A = [a.serialize() for a in into_items]
+        B = [b.serialize() for b in out_items]
+        self.assertCountEqual(
+            A, B
+        )  # Actually tests that lists are the same regardless of order
+
+        # Test Multiple Types
+        db.close()
+        db.createEmpty(force=True)
+
+        h = hashlib.sha256()
+        h.update(b"bruh")
+        h = h.hexdigest()
+        into_items.append(
+            EventItem(datetime.datetime.now(), h, bytearray([69, 69, 69, 69]))
         )
 
-        db.write(
-            [PeerItem("192.000.32.32", 6969, datetime.datetime.now(), True)],
-            WriteType.APPEND,
-        )
+        db.write(into_items, WriteType.APPEND)
+
+        out_items = db.query(PeerSelector(None))
+        out_items += db.query(HashSelector(None))
+
+        A = [a.serialize() for a in into_items]
+        B = [b.serialize() for b in out_items]
+        print(A)
+        print(B)
+        for a, b in zip(A, B):
+            print(a, b)
+
+        # self.assertCountEqual(
+        #     A, B
+        # )  # Actually tests that lists are the same regardless of order
 
 
 class TestSQLQuery(unittest.TestCase):
