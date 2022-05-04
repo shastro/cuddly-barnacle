@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Putting this at the top, despite that this'll automatically connect
 # to the network immediately upon loading the library. Not sure how
 # else to easily communicate state to a Flask app.
-# node = Node()
+node = Node()
 
 
 @app.route('/', methods=['GET', 'POST'])
