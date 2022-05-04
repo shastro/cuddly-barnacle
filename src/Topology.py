@@ -300,7 +300,12 @@ class SolitaryState(NodeState):
     ) -> None:
         self._info = info
         self._new_events = events
+
+        # Pipe used to signal that we should try to connect to a new
+        # peer.
         self._connect_pipe = None
+
+        # New peer that we should connect to.
         self._connect_addr = None
 
     def run(self) -> NodeState:
