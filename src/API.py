@@ -28,9 +28,13 @@ def index():
 def messages():
     """Retrieves a list of messages falling within a time range."""
     # data = MessagesReqBody(**request.args)
-    data = ["Airplane food, ammmie right guys", "bro what's an airplane",
-    "airplanes have food?", "my dad said he saw an airplane once",
-    "oh yeah I have like 8 airplanes, get gud"]
+    data = [
+        "Airplane food, ammmie right guys",
+        "bro what's an airplane",
+        "airplanes have food?",
+        "my dad said he saw an airplane once",
+        "oh yeah I have like 8 airplanes, get gud",
+    ]
     text = request.form
     print(text)
     # print(data)
