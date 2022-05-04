@@ -63,15 +63,20 @@ class Config:
 
     def __init__(
         self,
+        general: Any,
         networking: Any,
         security: Any,
     ) -> None:
+        self.general = GeneralConfig(**general)
         self.networking = NetworkingConfig(**networking)
         self.security = SecurityConfig(**security)
 
     @staticmethod
     def default() -> Any:
         return {
+            "general": {
+                "nickname": "user"
+            },
             "networking": {
                 "local_addr": "0.0.0.0",
                 "local_port": 18457,
@@ -98,6 +103,16 @@ class Config:
                 cfgfile.write(toml.dumps(cfg))
 
             return Config(**cfg)
+
+
+class GeneralConfig:
+    """General portion of the configuration file."""
+
+    def __init__(
+        self,
+        nickname: str,
+    ) -> None:
+        self.nickname = nickname
 
 
 class NetworkingConfig:

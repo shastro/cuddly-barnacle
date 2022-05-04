@@ -5,6 +5,9 @@ import json
 from typing import Optional
 from EncryptedStream import PublicKey
 from Node import Node
+import Event
+import datetime
+import Environment
 
 app = Flask(__name__)
 
@@ -43,7 +46,13 @@ def post():
     data = PostReqBody(**json.loads(request.data))
     print(data)
 
-    # TODO: do something with data
+    node.handle_event(Event.Event(
+        Event.EventMessagePost(
+            Environment.Env().get_config().general.nickname,
+            datetime.datetime.now().timestamp(),
+            data.message
+        )
+    ))
 
 
 @app.route('/invite', methods=['POST'])
