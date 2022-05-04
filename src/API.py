@@ -77,6 +77,8 @@ def ban():
 def enter():
     """Indicates to other users that you are online."""
     # no associated data
+    text = request.form
+    print(text)
     return render_template('connect.html')
 
     # TODO: implement
