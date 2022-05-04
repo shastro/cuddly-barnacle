@@ -562,11 +562,11 @@ class SQLiteDB:
         )
 
         self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS keys(publickey TEXT NOT NULL PRIMARY KEY, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
         )
 
         self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS events(timestamp REAL NOT NULL, hash TEXT NOT NULL PRIMARY KEY, event BLOB NOT NULL);"
         )
 
     def connect(self):
