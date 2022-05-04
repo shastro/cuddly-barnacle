@@ -18,7 +18,7 @@ form {
 
 form label {
   font-size: 1.5rem;
-  font-weight: bold;
+  font-weight: small;
 }
 
 input {
@@ -36,6 +36,8 @@ a:hover {
 
 #wrapper,
 #loginform {
+  /* display: flex;
+  justify-content: center; */
   margin: 0 auto;
   padding-bottom: 25px;
   background: #302f40;
@@ -77,6 +79,26 @@ a:hover {
   border: 1px solid #3d3850;
   background-color: #4a4b60;
 }
+
+#ip {
+  flex: 1;
+  max-height: 25px;
+  border-radius: 4px;
+  border: 1px solid #3d3850;
+  background-color: #4a4b60;
+}
+
+#port {
+  flex: 1;
+  max-height: 25px;
+  border-radius: 4px;
+  border: 1px solid #3d3850;
+  background-color: #4a4b60;
+}
+/* 
+#send_ip {
+
+} */
 
 #name {
   border-radius: 4px;
