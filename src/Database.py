@@ -551,23 +551,20 @@ class SQLiteDB:
             if force:
                 if os.path.exists(self.fname.as_posix()):
                     os.remove(self.fname.as_posix())
-                self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
-                self.cursor = self.connection.cursor()
-                self.cursor.execute("PRAGMA journal_mode=WAL;")
-                self.cursor.execute(
-                    "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-                )
-
-                self.cursor.execute(
-                    "CREATE TABLE keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
-                )
-
-                self.cursor.execute(
-                    "CREATE TABLE events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
-                )
-
         self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
+        self.cursor.execute("PRAGMA journal_mode=WAL;")
+        self.cursor.execute(
+            "CREATE TABLE IF NOT EXISTS peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+        )
+
+        self.cursor.execute(
+            "CREATE TABLE IF NOT EXISTS keys(publickey TEXT NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+        )
+
+        self.cursor.execute(
+            "CREATE TABLE IF NOT EXISTS events(timestamp REAL NOT NULL, hash TEXT NOT NULL, event BLOB NOT NULL);"
+        )
 
     def connect(self):
         """Connect to the database for operations. Will not create a new database"""
