@@ -1,6 +1,8 @@
 """The top-level status of a node."""
 
 from threading import Thread
+import hashlib
+import datetime
 
 import Database
 import Environment
@@ -64,17 +66,23 @@ class Node:
         while True:
             self._state = self._state.run()
             for event in self._state.get_new_events():
-                if isinstance(event._inner, EventMessagePost):
-                    blob = MemorySerializer()
-                    event.serialize(blob)
+                blob = MemorySerializer()
+                event.serialize(blob)
 
-                    self._database.write([
-                        Database.EventItem(
-                            event._timestamp,
-                            '',
-                            blob._blob,
-                        )
-                    ])
+                timestamp = 0
+                if isinstance(event._inner, EventMessagePost):
+                    timestamp = event._inner._timestamp
+
+                hash = hashlib.sha256()
+                hash.update(blob.bytes())
+
+                self._database.write([
+                    Database.EventItem(
+                        datetime.datetime.fromtimestamp(timestamp),
+                        hash.hexdigest(),
+                        blob.bytes(),
+                    )
+                ])
 
     def get_messages(
             self,
