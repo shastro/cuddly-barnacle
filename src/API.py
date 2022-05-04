@@ -33,6 +33,11 @@ def index():
     return render_template('msg.html', messages=data)
 
 
+@app.route('/connect', methods=['GET', 'POST'])
+def connect_page():
+    return render_template('connect.html')
+
+
 @app.route('/api/messages', methods=['GET'])
 def messages():
     """Retrieves a list of messages falling within a time range."""
@@ -98,9 +103,7 @@ def ban():
 def enter():
     """Indicates to other users that you are online."""
     # no associated data
-    text = request.form
-    print(text)
-    return render_template('connect.html')
+    pass
 
     # TODO: implement
 
