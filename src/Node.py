@@ -99,6 +99,8 @@ class Node:
                 )
             ])
 
+            self._state.send_events([event])
+
     def get_messages(
             self,
             start: Optional[int],

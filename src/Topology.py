@@ -23,7 +23,7 @@ from EncryptedStream import (
 from Packets import (
     Packet,
     PacketReroute,
-    PacketPostEvent,
+    PacketGetEventsResp,
 )
 from Serial import ConnectionClosed
 from Event import Event
@@ -55,6 +55,11 @@ class NodeState(ABC):
         events = self._new_events
         self._new_events = []
         return events
+
+    @abstractmethod
+    def send_events(self, events: List[Event]) -> None:
+        """Send the list of events to the next peer."""
+        pass
 
 
 class StableState(NodeState):
@@ -133,9 +138,15 @@ class StableState(NodeState):
 
         return self
 
+    def send_events(self, events: List[Event]) -> None:
+        Packet(PacketGetEventsResp(events)).serialize(
+            cast(BufferedWriter, self._succ)
+        )
+        self._succ.flush()
+
     def interpret_packet(self, packet: Packet):
-        if isinstance(packet._inner, PacketPostEvent):
-            self._new_events.append(packet._inner._event)
+        if isinstance(packet._inner, PacketGetEventsResp):
+            self._new_events.extend(packet._inner._events)
         elif isinstance(packet._inner, PacketReroute):
             addr = packet._inner._addr
             print('Rerouting to ' + addr[0] + ':' + str(addr[1]))
@@ -219,9 +230,15 @@ class HubState(NodeState):
         # another state.
         return self
 
+    def send_events(self, events: List[Event]) -> None:
+        Packet(PacketGetEventsResp(events)).serialize(
+            cast(BufferedWriter, self._succ)
+        )
+        self._succ.flush()
+
     def interpret_packet(self, packet: Packet):
-        if isinstance(packet._inner, PacketPostEvent):
-            self._new_events.append(packet._inner._event)
+        if isinstance(packet._inner, PacketGetEventsResp):
+            self._new_events.extend(packet._inner._events)
 
 
 class SpokeState(NodeState):
@@ -254,6 +271,12 @@ class SpokeState(NodeState):
             self._entry_point,
             self._new_events
         )
+
+    def send_events(self, events: List[Event]) -> None:
+        Packet(PacketGetEventsResp(events)).serialize(
+            cast(BufferedWriter, self._entry_point)
+        )
+        self._entry_point.flush()
 
 
 class SolitaryState(NodeState):
@@ -297,6 +320,10 @@ class SolitaryState(NodeState):
             successor=succ,
             events=self._new_events,
         )
+
+    def send_events(self, events: List[Event]) -> None:
+        # Do nothing, because there's no one to send the events to.
+        return None
 
 
 class NodeInfo:
