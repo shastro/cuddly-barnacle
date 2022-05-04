@@ -37,7 +37,16 @@ def messages():
     # return render_template('test.html', messages=data)
     return render_template('msg.html', messages=data)
 
-    # TODO: do something with data
+
+@app.route('/connect', methods=['POST'])
+def connect():
+    """Adds an address to the peer list."""
+    data = ConnectReqBody(**json.loads(request.data))
+    print(data)
+
+    node.add_address(data.addr)
+
+    return "ok"
 
 
 @app.route('/post', methods=['POST'])
@@ -116,6 +125,11 @@ class InviteReqBody:
 class BanReqBody:
     def __init__(self, name: str):
         self.name = name
+
+
+class ConnectReqBody:
+    def __init__(self, addr: str, port: int):
+        self.addr = (addr, port)
 
 
 if __name__ == '__main__':

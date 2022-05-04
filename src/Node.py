@@ -101,6 +101,19 @@ class Node:
 
             self._state.send_events([event])
 
+    def add_address(
+            self,
+            addr: PeerAddress,
+    ) -> None:
+        self._database.write([
+            Database.PeerItem(
+                addr[0],
+                addr[1],
+                datetime.datetime.now(),
+                True,
+            )
+        ])
+
     def get_messages(
             self,
             start: Optional[int],

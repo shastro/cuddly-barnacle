@@ -551,7 +551,10 @@ class SQLiteDB:
             if force:
                 if os.path.exists(self.fname.as_posix()):
                     os.remove(self.fname.as_posix())
-        self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
+        self.connection = sqlite3.connect(
+            database=self.fname.as_posix(),
+            check_same_thread=False,
+        )  # type: ignore
         self.cursor = self.connection.cursor()
         self.cursor.execute("PRAGMA journal_mode=WAL;")
         self.cursor.execute(
