@@ -42,9 +42,9 @@ def connect_page():
 def messages():
     """Retrieves a list of messages falling within a time range."""
     data = MessagesReqBody(**request.args)
-    print(data)
+    # print(data)
 
-    return '\n'.join(node.get_messages(data.start, data.end))
+    return '\n'.join(node.get_messages(data.start, data.end)) + '\n'
 
 
 @app.route('/api/status', methods=['GET'])
