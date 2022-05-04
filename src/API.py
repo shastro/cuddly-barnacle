@@ -44,7 +44,7 @@ def messages():
     data = MessagesReqBody(**request.args)
     print(data)
 
-    # TODO: do something with data
+    return '\n'.join(node.get_messages(data.start, data.end))
 
 
 @app.route('/api/status', methods=['GET'])

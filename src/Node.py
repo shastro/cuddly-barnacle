@@ -23,7 +23,7 @@ from Event import (
     Event,
     EventMessagePost,
 )
-from Serial import MemorySerializer
+from Serial import MemorySerializer, MemoryDeserializer
 
 
 class Node:
@@ -126,10 +126,27 @@ class Node:
             self,
             start: Optional[int],
             end: Optional[int]
-    ) -> List[Event]:
+    ) -> List[str]:
         """Gets a list of every event that occurred between the timestamps."""
-        # TODO: from database
-        return []
+        events: List[Database.EventItem] = self._database.query(
+            Database.TimeSelector(
+                Database.HashSelector(None),
+                datetime.datetime.fromtimestamp(start or 0),
+                datetime.datetime.fromtimestamp(end or 1851675863),
+            )
+        )
+
+        # fuck it, we're using strings here
+        messages: List[str] = []
+        for event in events:
+            event_obj = Event.deserialize(MemoryDeserializer(event.get_blob()))
+
+            # We only care about message events.
+            inner = event_obj._inner
+            if isinstance(inner, EventMessagePost):
+                messages.append(f"<{inner._author}> {inner._text}")
+
+        return messages
 
     def get_status(self) -> str:
         """Gets a short description of the node's status."""
