@@ -28,14 +28,14 @@ class Env:
         return cls.instance
 
     def __init__(self):
-        homedir = os.getenv("HOME")
-        self.subdir = ".chatchat"
-        if homedir:
-            self._root = homedir
-            self._application_root = PurePath(homedir, self.subdir)
-            self._configfile = PurePath(self._application_root, "config")
-            self._dbfolder = PurePath(self._application_root, "database")
-            self._database = PurePath(self._dbfolder, "client.db")
+        homedir = os.getenv("HOME") or "."
+        subdir = os.getenv("CHATCHAT_HOME") or PurePath(homedir, ".chatchat")
+
+        self._root = homedir
+        self._application_root = subdir
+        self._configfile = PurePath(subdir, "config")
+        self._dbfolder = PurePath(subdir, "database")
+        self._database = PurePath(self._dbfolder, "client.db")
 
         if not os.path.exists(self._application_root):
             os.mkdir(self._application_root)
