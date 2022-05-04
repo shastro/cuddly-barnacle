@@ -550,6 +550,7 @@ class SQLiteDB:
                     os.remove(self.fname.as_posix())
                 self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
                 self.cursor = self.connection.cursor()
+                self.cursor.execute("PRAGMA journal_mode=WAL;")
                 self.cursor.execute(
                     "CREATE TABLE peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
                 )
