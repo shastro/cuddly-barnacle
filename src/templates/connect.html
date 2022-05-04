@@ -4,8 +4,8 @@
         <title>ChatChat</title>
         <meta charset="utf-8" />
         <meta name="description" content="Tuts+ Chat Application" />
-        <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/default.css') }}">
-<!--         <link rel="stylesheet" type="text/css" href="../static/styles/default.css"/> -->
+        <!-- <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='styles/default.css') }}"> -->
+        <link rel="stylesheet" type="text/css" href="../static/styles/default.css"/>
     </head>
     <body>
         <div id="wrapper">
@@ -20,9 +20,9 @@
                 </div>
                 <form name="message" action="" method="POST">
                     <label for="ip">IP Address</label><br>
-                    <input type="text" id="ip" name="ip"><br>
+                    <input type="text" id="ip" name="ip" size="10"><br>
                     <label for="port">Port</label><br>
-                    <input type="text" id="port" name="port"><br><br>
+                    <input type="text" id="port" name="port" size="10"><br><br>
                     <input name="submitmsg" type="submit" id="submitmsg" value="Send" />
                 </form>
             </div>
