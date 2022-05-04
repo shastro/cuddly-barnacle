@@ -85,7 +85,7 @@ class MemorySerializer(BufferedWriter):
         self._blob += s
         return len(s)
 
-    def to_str(self) -> bytearray:
+    def bytes(self) -> bytearray:
         return self._blob
 
 
