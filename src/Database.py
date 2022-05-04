@@ -442,6 +442,9 @@ class EventItem(DatabaseItem):
     def get_table_name(self):
         return self._table_name
 
+    def get_blob(self):
+        return self._blob
+
 
 class PeerItem(DatabaseItem):
     """PeerItem, represents a row in the peers table"""
@@ -575,6 +578,9 @@ class SQLiteDB:
             self.connection = sqlite3.connect(self.fname.as_posix())
         except Exception:
             raise ConnectionError(self.fname.as_posix())
+
+        self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
+        self.cursor = self.connection.cursor()
 
     def commit(self):
         """Commit changes to the database."""
