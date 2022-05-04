@@ -1,9 +1,15 @@
 #!/usr/bin/env bash
 
 export CHATCHAT_HOME="$1"
-API_PORT="$2"
+# API_PORT="$2"
 
-python ./API.py 2> /dev/null &
+if [ "$CHATCHAT_HOME" = "alex1" ]; then
+    API_PORT="18458"
+else
+    API_PORT="18460"
+fi
+
+python ./API.py &
 
 LAST_MESSAGE=""
 
