@@ -21,8 +21,9 @@ form label {
   font-weight: small;
 }
 
-input {
+input, select, textarea{
   font-family: "Lato";
+  color: #ffffff;
 }
 
 a {
