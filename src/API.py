@@ -4,8 +4,14 @@ from flask import Flask, request, render_template, flash
 import json
 from typing import Optional
 from EncryptedStream import PublicKey
+from Node import Node
 
 app = Flask(__name__)
+
+# Putting this at the top, despite that this'll automatically connect
+# to the network immediately upon loading the library. Not sure how
+# else to easily communicate state to a Flask app.
+node = Node()
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -99,6 +105,7 @@ class InviteReqBody:
 class BanReqBody:
     def __init__(self, name: str):
         self.name = name
+
 
 if __name__ == '__main__':
     app.run()

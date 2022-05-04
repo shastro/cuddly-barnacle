@@ -39,7 +39,9 @@ class Node:
             Database.PubKeySelector(None)
         )
         peer_keys = [
-            PublicKey.from_public_bytes(item._key) for item in peer_key_items
+            PublicKey.from_public_bytes(
+                bytes.fromhex(item._key)
+            ) for item in peer_key_items
         ]
 
         self._state = topology_init(

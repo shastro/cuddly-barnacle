@@ -43,7 +43,7 @@ class Env:
         if not os.path.exists(self._dbfolder):
             os.mkdir(self._dbfolder)
 
-        self._config = Config.load_or_generate(self._configfile)  # type: ignore
+        self._config = Config.load_or_generate(self._configfile)
 
     def get_root_path(self):
         return self._root
@@ -119,7 +119,9 @@ class SecurityConfig:
         self,
         private_key: str,
     ) -> None:
-        self.private_key = PrivateKey.from_private_bytes(bytes.fromhex(private_key))
+        self.private_key = PrivateKey.from_private_bytes(
+            bytes.fromhex(private_key)
+        )
 
 
 def tests():
