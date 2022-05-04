@@ -43,7 +43,7 @@ class Env:
         if not os.path.exists(self._dbfolder):
             os.mkdir(self._dbfolder)
 
-        self._config = Config.load_or_generate(self._configfile)
+        self._config = Config.load_or_generate(self._configfile)  # type: ignore
 
     def get_root_path(self):
         return self._root
@@ -62,9 +62,9 @@ class Config:
     """Configuration data."""
 
     def __init__(
-            self,
-            networking: Any,
-            security: Any,
+        self,
+        networking: Any,
+        security: Any,
     ) -> None:
         self.networking = NetworkingConfig(**networking)
         self.security = SecurityConfig(**security)
@@ -72,27 +72,29 @@ class Config:
     @staticmethod
     def default() -> Any:
         return {
-            'networking': {
-                'local_addr': '0.0.0.0',
-                'local_port': 18457,
+            "networking": {
+                "local_addr": "0.0.0.0",
+                "local_port": 18457,
             },
-            'security': {
-                'private_key': PrivateKey.generate().private_bytes(
+            "security": {
+                "private_key": PrivateKey.generate()
+                .private_bytes(
                     encoding=Encoding.Raw,
                     format=PrivateFormat.Raw,
                     encryption_algorithm=NoEncryption(),
-                ).hex(),
+                )
+                .hex(),
             },
         }
 
     @staticmethod
-    def load_or_generate(path: str) -> 'Config':
+    def load_or_generate(path: str) -> "Config":
         if os.path.exists(path):
             return Config(**toml.load(path))
         else:
-            print(f'Configuration file {path} not found, creating it.')
+            print(f"Configuration file {path} not found, creating it.")
             cfg = Config.default()
-            with open(path, 'w') as cfgfile:
+            with open(path, "w") as cfgfile:
                 cfgfile.write(toml.dumps(cfg))
 
             return Config(**cfg)
@@ -102,9 +104,9 @@ class NetworkingConfig:
     """Networking portion of the configuration file."""
 
     def __init__(
-            self,
-            local_addr: str,
-            local_port: int,
+        self,
+        local_addr: str,
+        local_port: int,
     ) -> None:
         self.local_addr = local_addr
         self.local_port = local_port
@@ -114,12 +116,10 @@ class SecurityConfig:
     """Security portion of the configuration file."""
 
     def __init__(
-            self,
-            private_key: str,
+        self,
+        private_key: str,
     ) -> None:
-        self.private_key = PrivateKey.from_private_bytes(
-            bytes.fromhex(private_key)
-        )
+        self.private_key = PrivateKey.from_private_bytes(bytes.fromhex(private_key))
 
 
 def tests():
