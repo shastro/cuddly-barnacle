@@ -95,14 +95,6 @@ class PacketBase(ABC):
         pass
 
 
-class PacketPeerInfo(PacketBase):
-    """Provide peer information.
-
-    This should always be the first packet sent over an
-    `EncryptedConnection`, and provides information about the
-    """
-
-
 class PacketGetEvents(PacketBase):
     """Request for events since a particular time.
 
