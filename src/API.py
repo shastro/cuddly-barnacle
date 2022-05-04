@@ -4,7 +4,7 @@ from flask import Flask, request, render_template, flash
 import json
 from typing import Optional
 from EncryptedStream import PublicKey
-# from Node import Node
+from Node import Node
 import Event
 import datetime
 import Environment
