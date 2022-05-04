@@ -4,7 +4,7 @@ from flask import Flask, request, render_template, flash
 import json
 from typing import Optional
 from EncryptedStream import PublicKey
-from Node import Node
+# from Node import Node
 import Event
 import datetime
 import Environment
@@ -14,7 +14,7 @@ app = Flask(__name__)
 # Putting this at the top, despite that this'll automatically connect
 # to the network immediately upon loading the library. Not sure how
 # else to easily communicate state to a Flask app.
-node = Node()
+# node = Node()
 
 
 @app.route('/', methods=['GET', 'POST'])
@@ -73,11 +73,11 @@ def ban():
     # TODO: do something with data
 
 
-@app.route('/enter', methods=['POST'])
+@app.route('/enter', methods=['GET', 'POST'])
 def enter():
     """Indicates to other users that you are online."""
     # no associated data
-    pass
+    return render_template('connect.html')
 
     # TODO: implement
 
