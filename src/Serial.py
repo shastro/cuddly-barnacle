@@ -1,7 +1,7 @@
 """Serialization utilities."""
 
 from io import BufferedReader, BufferedWriter
-from typing import TypeVar, Callable, List
+from typing import TypeVar, Callable, List, Any, Optional
 
 T = TypeVar('T')
 
@@ -75,6 +75,30 @@ class Serialize:
         Serialize.long(stream, len(value))
         for item in value:
             serializer(stream, item)
+
+
+class MemorySerializer(BufferedWriter):
+    def __init__(self):
+        self._blob = b''
+
+    def write(self, s: Any) -> int:
+        self._blob += s
+        return len(s)
+
+    def to_str(self) -> bytearray:
+        return self._blob
+
+
+class MemoryDeserializer(BufferedReader):
+    def __init__(self, s: bytes):
+        self._blob = s
+        self._cursor = 0
+
+    def read(self, n: Optional[int] = 0) -> bytes:
+        n = n or 0
+        data = self._blob[self._cursor:(self._cursor + n)]
+        self._cursor += n
+        return data
 
 
 class ConnectionClosed(Exception):
