@@ -10,8 +10,12 @@ from EncryptedStream import (
     PrivateKey,
 )
 from Topology import initialize as topology_init
-from typing import Optional, List
-from Event import Event
+from typing import Optional, List, Any
+from Event import (
+    Event,
+    EventMessagePost,
+)
+from Serial import MemorySerializer
 
 
 class Node:
@@ -25,14 +29,14 @@ class Node:
 
         peer_items: List[Database.PeerItem] = self._database.query(
             Database.TrustSelector(
-                Database.PeerSelector(),
+                Database.PeerSelector(None),
                 True,
             )
         )
         peer_addrs = [(item._addr, item._port) for item in peer_items]
 
         peer_key_items: List[Database.PubKeyItem] = self._database.query(
-            Database.PubKeySelector()
+            Database.PubKeySelector(None)
         )
         peer_keys = [
             PublicKey.from_public_bytes(item._key) for item in peer_key_items
@@ -57,7 +61,18 @@ class Node:
         """Manages the node's network state forever."""
         while True:
             self._state = self._state.run()
-            # TODO: manage events
+            for event in self._state.get_new_events():
+                if isinstance(event._inner, EventMessagePost):
+                    blob = MemorySerializer()
+                    event.serialize(blob)
+
+                    self._database.write([
+                        Database.EventItem(
+                            event._timestamp,
+                            '',
+                            blob._blob,
+                        )
+                    ])
 
     def get_messages(
             self,
