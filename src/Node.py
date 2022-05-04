@@ -11,7 +11,13 @@ from EncryptedStream import (
     PublicKey,
     PrivateKey,
 )
-from Topology import initialize as topology_init
+from Topology import (
+    initialize as topology_init,
+    StableState,
+    HubState,
+    SpokeState,
+    SolitaryState,
+)
 from typing import Optional, List, Any
 from Event import (
     Event,
@@ -124,3 +130,16 @@ class Node:
         """Gets a list of every event that occurred between the timestamps."""
         # TODO: from database
         return []
+
+    def get_status(self) -> str:
+        """Gets a short description of the node's status."""
+        if isinstance(self._state, StableState):
+            return 'Connected'
+        elif isinstance(self._state, HubState):
+            return 'Connected, acting as entry node'
+        elif isinstance(self._state, SpokeState):
+            return 'Connecting'
+        elif isinstance(self._state, SolitaryState):
+            return 'Disconnected'
+        else:
+            return 'Error'

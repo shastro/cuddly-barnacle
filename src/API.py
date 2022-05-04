@@ -19,15 +19,6 @@ node = Node()
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    # body = request.values.get('Body', None)
-    # text = request.form['From']
-    return render_template('index.html')
-
-
-@app.route('/messages', methods=['GET', 'POST'])
-def messages():
-    """Retrieves a list of messages falling within a time range."""
-    # data = MessagesReqBody(**request.args)
     data = [
         "Airplane food, ammmie right guys",
         "bro what's an airplane",
@@ -42,7 +33,22 @@ def messages():
     return render_template('msg.html', messages=data)
 
 
-@app.route('/connect', methods=['POST'])
+@app.route('/api/messages', methods=['GET'])
+def messages():
+    """Retrieves a list of messages falling within a time range."""
+    data = MessagesReqBody(**request.args)
+    print(data)
+
+    # TODO: do something with data
+
+
+@app.route('/api/status', methods=['GET'])
+def status():
+    """Gets the current status of the node."""
+    return node.get_states()
+
+
+@app.route('/api/connect', methods=['POST'])
 def connect():
     """Adds an address to the peer list."""
     data = ConnectReqBody(**json.loads(request.data))
@@ -53,7 +59,7 @@ def connect():
     return "ok"
 
 
-@app.route('/post', methods=['POST'])
+@app.route('/api/post', methods=['POST'])
 def post():
     """Posts a message to the channel."""
     data = PostReqBody(**json.loads(request.data))
@@ -70,7 +76,7 @@ def post():
     return "ok"
 
 
-@app.route('/invite', methods=['POST'])
+@app.route('/api/invite', methods=['POST'])
 def invite():
     """Invites a new user to the channel."""
     data = InviteReqBody(**json.loads(request.data))
@@ -79,7 +85,7 @@ def invite():
     # TODO: do something with data
 
 
-@app.route('/ban', methods=['POST'])
+@app.route('/api/ban', methods=['POST'])
 def ban():
     """Removes a user from the channel."""
     data = BanReqBody(**json.loads(request.data))
@@ -88,7 +94,7 @@ def ban():
     # TODO: do something with data
 
 
-@app.route('/enter', methods=['GET', 'POST'])
+@app.route('/api/enter', methods=['GET', 'POST'])
 def enter():
     """Indicates to other users that you are online."""
     # no associated data
@@ -99,7 +105,7 @@ def enter():
     # TODO: implement
 
 
-@app.route('/leave', methods=['POST'])
+@app.route('/api/leave', methods=['POST'])
 def leave():
     """Indicates to other users that you are offline."""
     # no associated data
