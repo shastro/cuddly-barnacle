@@ -80,6 +80,7 @@ class Config:
             "networking": {
                 "local_addr": "0.0.0.0",
                 "local_port": 18457,
+                "api_port": 18458,
             },
             "security": {
                 "private_key": PrivateKey.generate()
@@ -122,9 +123,11 @@ class NetworkingConfig:
         self,
         local_addr: str,
         local_port: int,
+        api_port: int,
     ) -> None:
         self.local_addr = local_addr
         self.local_port = local_port
+        self.api_port = api_port
 
 
 class SecurityConfig:

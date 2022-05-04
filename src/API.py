@@ -58,10 +58,12 @@ def post():
     node.handle_event(Event.Event(
         Event.EventMessagePost(
             Environment.Env().get_config().general.nickname,
-            datetime.datetime.now().timestamp(),
-            data.message
+            int(datetime.datetime.now().timestamp()),
+            data.message,
         )
     ))
+
+    return "ok"
 
 
 @app.route('/invite', methods=['POST'])
@@ -133,4 +135,4 @@ class ConnectReqBody:
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(port=Environment.Env().get_config().networking.api_port)
