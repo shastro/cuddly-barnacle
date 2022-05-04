@@ -114,6 +114,8 @@ class Node:
             )
         ])
 
+        self._state.add_peer(addr)
+
     def get_messages(
             self,
             start: Optional[int],

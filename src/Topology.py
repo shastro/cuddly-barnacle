@@ -9,6 +9,7 @@ state of the network.
 from abc import ABC, abstractmethod
 from io import BufferedReader, BufferedWriter
 from typing import List, cast
+import os
 import random
 import select
 import sys
@@ -59,6 +60,11 @@ class NodeState(ABC):
     @abstractmethod
     def send_events(self, events: List[Event]) -> None:
         """Send the list of events to the next peer."""
+        pass
+
+    def add_peer(self, peer: PeerAddress) -> None:
+        """Connect to the peer if we're in the solitary state."""
+        print('Ignoring add_peer request')
         pass
 
 
@@ -294,6 +300,8 @@ class SolitaryState(NodeState):
     ) -> None:
         self._info = info
         self._new_events = events
+        self._connect_pipe = None
+        self._connect_addr = None
 
     def run(self) -> NodeState:
         """Runs the state until it progresses to another state.
@@ -305,25 +313,60 @@ class SolitaryState(NodeState):
         """
         print('Entering solitary state')
 
-        pred, pred_addr = self._info.listener.accept()
-        print(f'Got new connection from {pred_addr}, trying to connect back')
-        succ = EncryptedStream.connect(
-            self._info.local_addr,
-            pred_addr,
-            self._info.private_key,
-            lambda k: k in self._info.allowed_keys,
+        (r, w) = os.pipe()
+        self._connect_pipe = w  # BUG: race condition
+
+        readable, writable, exception = select.select(
+            [                   # read
+                r,
+                self._info.listener._sock,
+            ],
+            [],                 # write
+            [],                 # accept
         )
 
-        return StableState(
-            info=self._info,
-            predecessor=pred,
-            successor=succ,
-            events=self._new_events,
-        )
+        if r in readable:
+            try:
+                connection = EncryptedStream.connect(
+                    self._info.local_addr,
+                    self._connect_addr,  # type: ignore
+                    self._info.private_key,
+                    lambda key: True,
+                )
+
+                return SpokeState(
+                    info=self._info,
+                    entry_point=connection,
+                    events=[],
+                )
+            except ConnectionRefusedError or TimeoutError:
+                print('Note: new peer is unreachable')
+                return self
+
+        else:
+            pred, pred_addr = self._info.listener.accept()
+            print(f'Got new connection from {pred_addr}, trying to connect back')
+            succ = EncryptedStream.connect(
+                self._info.local_addr,
+                pred_addr,
+                self._info.private_key,
+                lambda k: k in self._info.allowed_keys,
+            )
+
+            return StableState(
+                info=self._info,
+                predecessor=pred,
+                successor=succ,
+                events=self._new_events,
+            )
 
     def send_events(self, events: List[Event]) -> None:
         # Do nothing, because there's no one to send the events to.
         return None
+
+    def add_peer(self, peer: PeerAddress) -> None:
+        self._connect_addr = peer
+        os.fdopen(self._connect_pipe, 'wb').write(b'a')
 
 
 class NodeInfo:
@@ -388,7 +431,6 @@ def initialize(
             # Peer is offline, just try other peers and don't report
             # the error.
             print(f'Note: peer {addr} is unreachable: {err}')
-            id(err)
             pass
     return SolitaryState(
         info=node_info,
