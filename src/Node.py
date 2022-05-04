@@ -66,23 +66,38 @@ class Node:
         while True:
             self._state = self._state.run()
             for event in self._state.get_new_events():
-                blob = MemorySerializer()
-                event.serialize(blob)
+                self.handle_event(event)
 
-                timestamp = 0
-                if isinstance(event._inner, EventMessagePost):
-                    timestamp = event._inner._timestamp
+    def handle_event(self, event: Event) -> None:
+        """Handles an incoming event.
 
-                hash = hashlib.sha256()
-                hash.update(blob.bytes())
+        If the event is already included in the database, this
+        function does nothing; otherwise, the function inserts the
+        event into the database, and forwards it to other clients.
 
-                self._database.write([
-                    Database.EventItem(
-                        datetime.datetime.fromtimestamp(timestamp),
-                        hash.hexdigest(),
-                        blob.bytes(),
-                    )
-                ])
+        """
+        blob = MemorySerializer()
+        event.serialize(blob)
+
+        hash = hashlib.sha256()
+        hash.update(blob.bytes())
+
+        if len(self._database.query(
+            Database.HashSelector(
+                [hash.hexdigest()]
+            )
+        )) == 0:
+            timestamp = 0
+            if isinstance(event._inner, EventMessagePost):
+                timestamp = event._inner._timestamp
+
+            self._database.write([
+                Database.EventItem(
+                    datetime.datetime.fromtimestamp(timestamp),
+                    hash.hexdigest(),
+                    blob.bytes(),
+                )
+            ])
 
     def get_messages(
             self,
