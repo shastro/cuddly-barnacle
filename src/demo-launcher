@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+
+export CHATCHAT_HOME="$1"
+API_PORT="$2"
+
+python ./API.py 2> /dev/null &
+
+LAST_MESSAGE=""
+
+while true; do
+    read POST
+    if [ "$POST" = "" ]; then
+        # NEW_MESSAGE="$(curl "http://127.0.0.1:$API_PORT/api/messages" 2>/dev/null | tail -n1)"
+        # if [ "$LAST_MESSAGE" != "$NEW_MESSAGE" ]; then
+        #     echo "$NEW_MESSAGE"
+        # fi
+
+        # LAST_MESSAGE="$NEW_MESSAGE"
+        curl "http://127.0.0.1:$API_PORT/api/messages"
+    else
+        curl "http://127.0.0.1:$API_PORT/api/post" --json "{\"message\":\"$POST\"}" > /dev/null 2> /dev/null
+    fi
+done
