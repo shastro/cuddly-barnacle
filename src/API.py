@@ -12,7 +12,7 @@ app = Flask(__name__)
 def index():
     # body = request.values.get('Body', None)
     # text = request.form['From']
-    return render_template('index.html', messages=data)
+    return render_template('index.html')
 
 
 @app.route('/messages', methods=['GET', 'POST'])
@@ -22,6 +22,8 @@ def messages():
     data = ["Airplane food, ammmie right guys", "bro what's an airplane",
     "airplanes have food?", "my dad said he saw an airplane once",
     "oh yeah I have like 8 airplanes, get gud"]
+    text = request.form
+    print(text)
     # print(data)
     # return render_template('test.html', messages=data)
     return render_template('msg.html', messages=data)
