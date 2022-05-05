@@ -40,7 +40,7 @@ import unittest
 from abc import ABC, abstractclassmethod, abstractmethod, abstractproperty
 from enum import Enum, auto, unique
 import os
-from os import path
+from os import linesep, path
 from os import PathLike
 from pathlib import PurePath
 from sqlite3.dbapi2 import Date
@@ -558,15 +558,18 @@ class SQLiteDB:
         self.cursor = self.connection.cursor()
         self.cursor.execute("PRAGMA journal_mode=WAL;")
         self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS peers(addr TEXT NOT NULL, port INTEGER NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS peers(addr TEXT NOT NULL, port INTEGER "
+            "NOT NULL, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
         )
 
         self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS keys(publickey TEXT NOT NULL PRIMARY KEY, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS keys(publickey TEXT NOT NULL PRIMARY "
+            "KEY, timestamp REAL NOT NULL, trust INTEGER NOT NULL);"
         )
 
         self.cursor.execute(
-            "CREATE TABLE IF NOT EXISTS events(timestamp REAL NOT NULL, hash TEXT NOT NULL PRIMARY KEY, event BLOB NOT NULL);"
+            "CREATE TABLE IF NOT EXISTS events(timestamp REAL NOT NULL, hash "
+            "TEXT NOT NULL PRIMARY KEY, event BLOB NOT NULL);"
         )
 
     def connect(self):
@@ -582,10 +585,10 @@ class SQLiteDB:
         self.connection = sqlite3.connect(self.fname.as_posix())  # type: ignore
         self.cursor = self.connection.cursor()
 
-    def commit(self):
-        """Commit changes to the database."""
+    # def commit(self):
+    #     """Commit changes to the database."""
 
-        self.committed = True
+    #     self.committed = True
 
     def close(self):
         """Close the database connection."""
@@ -616,7 +619,6 @@ class SQLiteDB:
             dbitems.append(ItemType.deserialize(*item))
 
         return dbitems
-        # raise InvalidQuery("Invalid Query Type in Function eventQuery")
 
     def write(
         self,
@@ -626,7 +628,9 @@ class SQLiteDB:
     ):
         """Will write the input item to the database using the specified WriteMode
 
-        Will append by default. If you wish to delete everything from a table pass an empty list to the argument keys and specify a table name in the optional table_name argument
+        Will append by default. If you wish to delete everything from a table
+        pass an empty list to the argument keys and specify a table name in the
+        optional table_name argument
 
         """
         if table_name is not None:
@@ -648,7 +652,8 @@ class SQLiteDB:
 
             for item in items:
                 self.cursor.execute(  # type: ignore
-                    f"INSERT INTO {item.get_table_name()} VALUES ({'?,'*(len(item.serialize())-1)}?);",  # type:ignore
+                    f"INSERT INTO {item.get_table_name()} VALUES "
+                    f"({'?,'*(len(item.serialize())-1)}?);",  # type:ignore
                     item.serialize(),  # type: ignore
                 )  # type: ignore
 
@@ -662,11 +667,13 @@ class SQLiteDB:
             for item in items:
                 if item.get_table_name() != table_name:
                     raise WriteError(
-                        f"Cannot synchronize multiple item types on mismatching table name. Tried to delete from {table_name} on object from {item.get_table_name()}"
+                        f"Cannot synchronize multiple item types on mismatching table name. "
+                        f"Tried to delete from {table_name} on object from {item.get_table_name()}"
                     )
 
                 self.cursor.execute(  # type: ignore
-                    f"INSERT INTO {item.get_table_name()} VALUES ({'?,'*(len(item.serialize())-1)}?);",  # type:ignore
+                    f"INSERT INTO {item.get_table_name()} VALUES "
+                    f"({'?,'*(len(item.serialize())-1)}?);",  # type:ignore
                     item.serialize(),  # type: ignore
                 )  # type: ignore
 
