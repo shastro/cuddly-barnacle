@@ -13,6 +13,8 @@ from typing import Any, Callable, cast, Optional, Tuple, Type
 import socket
 import sys
 import time
+import unittest
+import threading
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric.x25519 import (
@@ -74,6 +76,10 @@ class EncryptedStream(BufferedIOBase):
     ) -> None:
         """Creates a new EncryptedStream.
 
+        This constructor is considered private and should not be used
+        by external classes under any circumstances; it can change at
+        any time.
+
         The stream will send and receive encrypted data using the
         given pair of keys: one for encrypting outgoing data, and
         another for decrypting incoming data. (Due to the nature of a
@@ -83,6 +89,8 @@ class EncryptedStream(BufferedIOBase):
         The first parameter to the function (inner) is the actual
         object used for exchanging data; the second parameter
         (selector) is used as a parameter to the `select()` function.
+
+        Postconditions: `_inner` is an open stream.
 
         """
         self._inner = inner
@@ -121,6 +129,9 @@ class EncryptedStream(BufferedIOBase):
         returns `false`, we abort the connection and raise an
         exception.
 
+        Postcondition: a connection to `other_addr` is created, and a
+        key exchange is performed.
+
         """
         sock = socket.socket()
         sock.connect(other_addr)
@@ -146,7 +157,13 @@ class EncryptedStream(BufferedIOBase):
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> None:
-        """Exits a `with` block."""
+        """Exits a `with` block.
+
+        Precondition: `_inner` is an open stream.
+
+        Postcondition: `_inner` is a closed stream.
+
+        """
         BufferedIOBase.__exit__(self, exc_type, exc_val, exc_tb)
         self._inner.close()
 
@@ -159,6 +176,8 @@ class EncryptedStream(BufferedIOBase):
         exception if the data cannot be sent. This function can be
         considered secure: under no circumstances can an eavesdropper
         on the wire be able to obtain or modify `data`.
+
+        Precondition: `_inner` is an open stream.
 
         """
         if DRY_RUN:
@@ -174,6 +193,8 @@ class EncryptedStream(BufferedIOBase):
         The semantics of this function are the same as those of
         io.BufferedIOPair.read.
 
+        Precondition: `_inner` is an open stream.
+
         """
         encrypted = self._inner.read(n)
         if DRY_RUN:
@@ -187,6 +208,8 @@ class EncryptedStream(BufferedIOBase):
         Immediately sends any bytes that have been queued using
         `write`.
 
+        Postcondition: `_inner` has zero bytes in its buffer.
+
         """
         self._inner.flush()
 
@@ -196,11 +219,19 @@ class EncryptedStream(BufferedIOBase):
         After this function is called, the socket object becomes
         invalidated, and no further member functions may be called.
 
+        Precondition: `_inner` is an open stream.
+
+        Postcondition: `_inner` is a closed stream.
+
         """
         self._inner.close()
 
     def selector(self) -> int:
-        """Gets the object to pass to the `select` function."""
+        """Gets the object to pass to the `select` function.
+
+        This function is pure.
+
+        """
         return self._selector
 
 
@@ -231,6 +262,10 @@ class EncryptedListener:
 
         Throws an exception if binding to the address-port pair fails.
 
+        Precondition: the system is not listening on address `addr`.
+
+        Postcondition: the system is listening on address `addr`.
+
         """
 
         self._addr = addr
@@ -243,6 +278,14 @@ class EncryptedListener:
         self._key_checker = key_checker
 
     def __enter__(self) -> "EncryptedListener":
+        """Enters a `with` block.
+
+        Since this operation has no special meaning for an
+        EncryptedListener, this function does nothing.
+
+        This function is pure.
+
+        """
         return self
 
     def __exit__(
@@ -251,7 +294,13 @@ class EncryptedListener:
         exc_val: Optional[BaseException],
         exc_tb: Optional[TracebackType],
     ) -> None:
-        """Exits a `with` block."""
+        """Exits a `with` block.
+
+        Precondition: `_sock` is an open socket.
+
+        Postcondition: `_sock` is a closed socket.
+
+        """
         self._sock.close()
 
     def accept(self) -> Tuple[EncryptedStream, PeerAddress]:
@@ -260,6 +309,8 @@ class EncryptedListener:
         Waits for the next valid, encrypted connection to the listener
         socket, and returns it as an encrypted stream. Also returns
         the address and port of the remote host.
+
+        Precondition: `_sock` is an open socket.
 
         """
         while True:
@@ -283,6 +334,8 @@ class EncryptedListener:
                 return (EncryptedStream(buf, sock.fileno(), s2c, c2s), addr)
 
             except Exception as e:
+                if isinstance(e, OSError):
+                    raise e
                 print("Warning: rejected incoming connection: " + str(e))
 
 
@@ -399,6 +452,108 @@ class SecurityException(ProtocolException):
         super().__init__(message)
 
 
+class TestEncryptedListener(unittest.TestCase):
+    def test_begins_listening(self):
+        """Verify that `EncryptedListener()` begins listening.
+
+        The precondition and postcondition on `EncryptedListener()`
+        contradict each other; verify that this is the case by
+        creating two `EncryptedListener`s with the same parameters and
+        detecting the exception caused by the contradiction.
+
+        """
+        addr = ("0.0.0.0", 2525)
+        private_key = PrivateKey.generate()
+        key_checker = lambda k: True  # noqa: E731
+
+        with EncryptedListener(addr, private_key, key_checker):
+            with self.assertRaises(OSError):
+                # Should error out: address already in use.
+                EncryptedListener(addr, private_key, key_checker)
+
+    def test_stops_listening(self):
+        """Verify that `__exit__` stops listening."""
+        addr = ("0.0.0.0", 2526)
+        private_key = PrivateKey.generate()
+        key_checker = lambda k: True  # noqa: E731
+
+        listener = EncryptedListener(addr, private_key, key_checker)
+        listener.__exit__(None, None, None)
+        with self.assertRaises(OSError):
+            listener.accept()
+
+    def test_accept(self):
+        """Verify that `accept` can receive a connection."""
+        addr_1 = ("0.0.0.0", 2527)
+        addr_2 = ("0.0.0.0", 2528)
+        private_key_1 = PrivateKey.generate()
+        private_key_2 = PrivateKey.generate()
+        key_checker = lambda k: True  # noqa: E731
+
+        with EncryptedListener(
+                addr_1,
+                private_key_1,
+                key_checker,
+        ) as listener:
+            # Need to connect from another thread, so the handshake
+            # can take place properly.
+            threading.Thread(
+                target=lambda: EncryptedStream.connect(
+                    addr_2,
+                    addr_1,
+                    private_key_2,
+                    key_checker,
+                )
+            ).start()
+
+            listener.accept()
+
+
+class TestEncryptedStream(unittest.TestCase):
+    def test_sending_data(self):
+        """Test sending data between two EncryptedStreams.
+
+        By implication, this tests the postcondition on the function
+        EncryptedStream.__init__, the postcondition on connect(), the
+        postcondition on write(), and the postcondition on read().
+
+        """
+        addr_1 = ("0.0.0.0", 2529)
+        addr_2 = ("0.0.0.0", 2530)
+        private_key_1 = PrivateKey.generate()
+        private_key_2 = PrivateKey.generate()
+        key_checker = lambda k: True  # noqa: E731
+
+        with EncryptedListener(
+                addr_1,
+                private_key_1,
+                key_checker,
+        ) as listener:
+            global conn_1
+            conn_1 = None
+
+            def connect():
+                global conn_1
+                print("connecting")
+                conn_1 = EncryptedStream.connect(
+                    addr_2,
+                    addr_1,
+                    private_key_2,
+                    key_checker
+                )
+                print("connected")
+
+            threading.Thread(
+                target=connect,
+            ).start()
+            conn_2, _addr = listener.accept()
+            time.sleep(1)       # race condition
+
+            conn_2.write(b'hello')
+            conn_2.flush()
+            self.assertEqual(conn_1.read(5), b'hello')
+
+
 def basic_test() -> None:
     command = sys.argv[1]
     if command == "listen":
@@ -433,4 +588,5 @@ def basic_test() -> None:
 
 
 if __name__ == "__main__":
-    basic_test()
+    # basic_test()
+    unittest.main()
